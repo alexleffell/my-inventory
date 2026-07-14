@@ -16,6 +16,7 @@ services:
     volumes:
       - ./data:/app/data          # inventory.json, pending.json, users.json — PERSISTENT
       - ./captures:/app/captures  # photos — PERSISTENT
+      - ./models:/app/models      # 3D model files — PERSISTENT
       - ./public:/app/public      # live UI — rsync edits take effect without a rebuild
     labels:
       # Traefik v1 routing. Replace inventory.example.com with your domain.

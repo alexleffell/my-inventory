@@ -27,3 +27,6 @@ deploy/admin.env
 # the box. Transient capture sidecars / review markers are not.
 captures/*.json
 captures/.DS_Store
+
+# 3D model files attached to items (personal data, can be large)
+models/

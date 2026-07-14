@@ -20,16 +20,18 @@ OUT="$DEST/backup-$TS"
 # timestamped+zip rotation (default mode), so this can't evict that history.
 if [ "${1:-}" = "latest" ]; then
   LATEST="$DEST/latest"
-  mkdir -p "$LATEST/data" "$LATEST/captures"
+  mkdir -p "$LATEST/data" "$LATEST/captures" "$LATEST/models"
   rsync -az --delete -e "ssh -o BatchMode=yes" "$VPS:$VPSPATH/data/"     "$LATEST/data/"
   rsync -az          -e "ssh -o BatchMode=yes" "$VPS:$VPSPATH/captures/" "$LATEST/captures/"
+  rsync -az          -e "ssh -o BatchMode=yes" "$VPS:$VPSPATH/models/"   "$LATEST/models/" 2>/dev/null || true
   echo "$(date '+%Y-%m-%d %H:%M:%S')  refreshed live mirror -> $LATEST"
   exit 0
 fi
 
-mkdir -p "$OUT/data" "$OUT/captures"
+mkdir -p "$OUT/data" "$OUT/captures" "$OUT/models"
 rsync -az -e "ssh -o BatchMode=yes" "$VPS:$VPSPATH/data/"     "$OUT/data/"
 rsync -az -e "ssh -o BatchMode=yes" "$VPS:$VPSPATH/captures/" "$OUT/captures/"
+rsync -az -e "ssh -o BatchMode=yes" "$VPS:$VPSPATH/models/"   "$OUT/models/" 2>/dev/null || true
 
 # single zip alongside, for easy off-machine copying
 ( cd "$OUT" && zip -qr "../inventory-$TS.zip" . ) || true

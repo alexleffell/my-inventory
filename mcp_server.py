@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """MCP server exposing the inventory for read/query by an LLM agent.
 
-Pure standard library — runs on the system python3 (no uv, no pip). Read-only:
-it just calls the inventory's public HTTP API. Speaks the MCP stdio transport
-(newline-delimited JSON-RPC 2.0).
+Pure standard library — runs on the system python3 (no uv, no pip). Mostly
+read-only: it calls the inventory's public HTTP API. Speaks the MCP stdio
+transport (newline-delimited JSON-RPC 2.0).
 
 Point it at a server with INVENTORY_URL (default: a local server):
     INVENTORY_URL=https://inventory.example.com  python3 mcp_server.py
+
+Write tools (attach_item_model) need admin credentials, taken from
+INVENTORY_ADMIN_USER / INVENTORY_ADMIN_PASS in the environment. Without them
+the read tools and the public request_purchase still work.
 """
 import sys
 import os
@@ -56,6 +60,25 @@ def _get_bytes(path):
     req = urllib.request.Request(BASE + path, headers={"User-Agent": _UA})
     with urllib.request.urlopen(req, timeout=30) as r:
         return r.read(), (r.headers.get("Content-Type") or "")
+
+
+def _post_admin(path, body):
+    """POST with admin Basic auth from INVENTORY_ADMIN_USER/INVENTORY_ADMIN_PASS."""
+    user = os.environ.get("INVENTORY_ADMIN_USER", "")
+    pw = os.environ.get("INVENTORY_ADMIN_PASS", "")
+    if not user or not pw:
+        raise ValueError("admin credentials missing: set INVENTORY_ADMIN_USER and "
+                         "INVENTORY_ADMIN_PASS in the MCP server's environment")
+    token = base64.b64encode(("%s:%s" % (user, pw)).encode()).decode()
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(BASE + path, data=data, method="POST", headers={
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": _UA,
+        "Authorization": "Basic " + token,
+    })
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.load(r)
 
 
 _MIME = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -131,6 +154,31 @@ TOOLS = [
         },
     },
     {
+        "name": "attach_item_model",
+        "description": "Attach a 3D model file (STL/3MF/OBJ/GLB/GLTF/STEP/SCAD) from the local filesystem to an inventory item, e.g. a printable holder, case or the part's own CAD model. The file is uploaded to the inventory server and listed in the item's 'models' field. Requires admin credentials in the MCP server environment.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "exact item id, e.g. cap-1717000000000"},
+                "file_path": {"type": "string", "description": "absolute path of the local model file to upload"},
+                "filename": {"type": "string", "description": "override the stored filename (defaults to the file's basename)"},
+            },
+            "required": ["id", "file_path"],
+        },
+    },
+    {
+        "name": "get_item_model",
+        "description": "Download a 3D model attached to an inventory item to a local file so it can be opened, edited, or printed. Give an item 'id' (downloads its models; lists them if it has several and no 'file' is given) or a specific model 'file' name from the item's 'models' field.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "string", "description": "item id whose model(s) to fetch"},
+                "file": {"type": "string", "description": "specific model filename, e.g. model-1717000000000-holder.stl"},
+                "save_dir": {"type": "string", "description": "local directory to save into (default: a temp dir)"},
+            },
+        },
+    },
+    {
         "name": "request_purchase",
         "description": "Request that a part be bought and added to Moshe's inventory. Use when a project needs a component that isn't in stock. Be specific: the exact part, what kind of product it is, which project it's for, and why it's needed.",
         "inputSchema": {
@@ -201,6 +249,48 @@ def _item_images(args):
     return content
 
 
+def _attach_model(args):
+    iid = (args.get("id") or "").strip()
+    fp = (args.get("file_path") or "").strip()
+    if not iid or not fp:
+        raise ValueError("id and file_path are required")
+    if not os.path.isfile(fp):
+        raise ValueError("no such file: %s" % fp)
+    with open(fp, "rb") as f:
+        data = base64.b64encode(f.read()).decode()
+    filename = (args.get("filename") or "").strip() or os.path.basename(fp)
+    return _post_admin("/api/model", {"id": iid, "filename": filename, "data": data})
+
+
+def _get_model(args):
+    iid = (args.get("id") or "").strip()
+    fname = (args.get("file") or "").strip()
+    if not iid and not fname:
+        raise ValueError("provide an item 'id' or a model 'file' name")
+    files = [fname] if fname else []
+    if not files:
+        items = [it for it in _get("/api/inventory").get("items", [])
+                 if it.get("id") == iid]
+        if not items:
+            raise ValueError("no item with id %r" % iid)
+        files = items[0].get("models") or []
+        if not files:
+            raise ValueError("item %s has no 3D models attached" % iid)
+    save_dir = (args.get("save_dir") or "").strip()
+    if not save_dir:
+        import tempfile
+        save_dir = tempfile.mkdtemp(prefix="inventory-models-")
+    os.makedirs(save_dir, exist_ok=True)
+    saved = []
+    for fn in files:
+        raw, _ctype = _get_bytes("/models/" + fn)
+        out = os.path.join(save_dir, os.path.basename(fn))
+        with open(out, "wb") as f:
+            f.write(raw)
+        saved.append({"file": fn, "saved_to": out, "bytes": len(raw)})
+    return {"ok": True, "models": saved}
+
+
 def call_tool(name, args):
     if name == "inventory_summary":
         return _get("/api/summary")
@@ -218,6 +308,10 @@ def call_tool(name, args):
         return _item_images(args)
     if name == "list_wishlist":
         return _get("/api/wishlist")
+    if name == "attach_item_model":
+        return _attach_model(args)
+    if name == "get_item_model":
+        return _get_model(args)
     if name == "request_purchase":
         part = (args.get("part") or "").strip()
         if not part:

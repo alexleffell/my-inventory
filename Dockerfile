@@ -7,7 +7,7 @@ COPY public ./public
 COPY deploy/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# data/ and captures/ are bind-mounted volumes (persistent — never baked in).
+# data/, captures/ and models/ are bind-mounted volumes (persistent — never baked in).
 ENV INVENTORY_HOST=0.0.0.0 INVENTORY_PORT=8770
 EXPOSE 8770
 

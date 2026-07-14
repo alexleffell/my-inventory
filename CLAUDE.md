@@ -24,12 +24,12 @@ requests). Requires only Python 3 (tested on 3.9+). No build step.
 
 ## Data safety
 
-The inventory can take real effort to build. Treat `data/` and `captures/` as
-precious:
+The inventory can take real effort to build. Treat `data/`, `captures/` and
+`models/` as precious:
 - `save_inv`/`save_pending` write **atomically** (temp file + rename) and keep a
   one-step `data/*.json.bak`. A write that would wipe a non-empty inventory to
   zero items drops a timestamped `*.emptied-*.bak` first.
-- `scripts/backup.sh` pulls `data/` + `captures/` from the live server to a local
+- `scripts/backup.sh` pulls `data/` + `captures/` + `models/` from the live server to a local
   folder (timestamped + zip, read-only, pruned). Schedule it (cron/launchd).
   `scripts/backup.sh latest` does a fast in-place mirror (no timestamp/zip/prune).
   Configure with `VPS_HOST` (+ optional `VPS_USER`, `VPS_PATH`, `BACKUP_DEST`).
@@ -42,7 +42,8 @@ precious:
 
 ```
 server.py            # tiny stdlib HTTP server (ThreadingHTTPServer) on :8770
-mcp_server.py        # optional MCP server (stdlib) exposing read/query + request_purchase
+mcp_server.py        # optional MCP server (stdlib): read/query, request_purchase,
+                     # attach_item_model / get_item_model (3D models)
 public/
   capture.html       # camera capture (multi-photo per item) + live inventory panel
   dashboard.html     # editable dashboard (edit modal w/ inline camera, lightbox gallery)
@@ -50,6 +51,9 @@ public/
 data/
   inventory.json     # the inventory: { "items": [ ... ] }
   wishlist.json      # purchase requests ("to buy"): { "wishlist": [ ... ] }  (gitignored)
+models/
+  model-<ms>-<name>.<ext>  # 3D model files attached to items (stl/3mf/obj/glb/
+                     # gltf/step/stp/scad); gitignored, bind-mounted in Docker
 captures/
   cap-<ms>.png       # raw captured frames (the photo for each item)
   cap-<ms>.json      # one sidecar per item on confirmation: {files:[...], quantity, note, location}
@@ -111,6 +115,9 @@ hardcoded.
 | `GET /api/pending`   | Returns pending duplicate decisions (`pending.json`).       |
 | `POST /api/pending`  | `{matches:[...], candidate}` → queue a duplicate for the user. |
 | `POST /api/resolve`  | `{pending_id, action}` → apply add/set/separate/dismiss from the UI. |
+| `POST /api/model`    | **Admin**: attach a 3D model to an item: `{id, filename, data:base64}` → saves `models/model-<ms>-<name>.<ext>`, appends to the item's `models`. |
+| `POST /api/model/delete` | **Admin**: `{id, file}` → detach from the item and delete the file. |
+| `GET /models/<f>`    | Public download of a model file (Content-Disposition: attachment). |
 | `GET /api/wishlist`  | Public: purchase requests (the "to buy" list).              |
 | `POST /api/wishlist` | **PUBLIC create** of a request (so a no-creds agent can ask for a part). |
 | `POST /api/wishlist/resolve` | **Admin**: manage a request (status/edit/delete).   |
@@ -130,9 +137,21 @@ Prefer it over editing `inventory.json` directly, which races with the server.
   "location": "Bag 1",         // "<Bag|Bin> <number>"
   "condition": "New (sealed bag)",
   "notes": "SKU #106611. ...",
-  "images": ["cap-<ms>.png", ...]  // one or more photos; omitted/empty for manual adds
+  "images": ["cap-<ms>.png", ...], // one or more photos; omitted/empty for manual adds
+  "models": ["model-<ms>-holder.stl", ...]  // optional 3D models (files in models/)
 }
 ```
+
+## 3D models on items
+
+An item can carry 3D model files (a printable holder/case, or the part's own CAD
+model): allowed types `stl 3mf obj glb gltf step stp scad`. Files live in
+`models/` (gitignored, bind-mounted, backed up). Upload via `POST /api/model`
+(admin) with base64 data; download publicly via `GET /models/<file>`; detach via
+`POST /api/model/delete`. The item's `models` array mirrors `images`.
+**MCP tools**: `attach_item_model` (uploads a local file; needs
+`INVENTORY_ADMIN_USER`/`INVENTORY_ADMIN_PASS` in the MCP server env) and
+`get_item_model` (downloads an item's models to a local dir, default a temp dir).
 
 ## Duplicate handling (resolved in the WEB APP, never the terminal)
 

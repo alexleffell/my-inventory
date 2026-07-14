@@ -28,11 +28,12 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(ROOT, "public")
 DATA = os.path.join(ROOT, "data")
 CAPTURES = os.path.join(ROOT, "captures")
+MODELS = os.path.join(ROOT, "models")
 INVENTORY = os.path.join(DATA, "inventory.json")
 PENDING = os.path.join(DATA, "pending.json")
 WISHLIST = os.path.join(DATA, "wishlist.json")
 
-for d in (DATA, CAPTURES):
+for d in (DATA, CAPTURES, MODELS):
     os.makedirs(d, exist_ok=True)
 if not os.path.exists(INVENTORY):
     with open(INVENTORY, "w") as f:
@@ -113,6 +114,19 @@ def load_wishlist():
 def save_wishlist(w):
     _atomic_write(WISHLIST, json.dumps(w, indent=2))
 
+
+# 3D model files an item can carry (models/ dir, item field "models": [...]).
+MODEL_EXTS = (".stl", ".3mf", ".obj", ".glb", ".gltf", ".step", ".stp", ".scad")
+MODEL_TYPES = {
+    ".stl": "model/stl",
+    ".3mf": "model/3mf",
+    ".obj": "model/obj",
+    ".glb": "model/gltf-binary",
+    ".gltf": "model/gltf+json",
+    ".step": "application/step",
+    ".stp": "application/step",
+    ".scad": "text/plain; charset=utf-8",
+}
 
 # Allowed status values for a purchase request, in lifecycle order.
 WISH_STATUSES = ("requested", "ordered", "bought")
@@ -338,13 +352,30 @@ class Handler(BaseHTTPRequestHandler):
                     continue
                 if loc and loc != (it.get("location", "") or "").lower():
                     continue
-                res.append({k: it.get(k) for k in ("id", "name", "category", "quantity", "location", "condition", "notes", "images")})
+                res.append({k: it.get(k) for k in ("id", "name", "category", "quantity", "location", "condition", "notes", "images", "models")})
             if limit > 0:
                 res = res[:limit]
             return self._send(200, {"count": len(res), "items": res})
         if path.startswith("/captures/"):
             name = os.path.basename(path)
             return self._serve_file(os.path.join(CAPTURES, name))
+        if path.startswith("/models/"):
+            # Public download of an item's 3D model file.
+            name = os.path.basename(path)
+            fp = os.path.join(MODELS, name)
+            if not os.path.isfile(fp):
+                return self._send(404, {"error": "not found"})
+            ctype = MODEL_TYPES.get(os.path.splitext(name)[1].lower(), "application/octet-stream")
+            with open(fp, "rb") as f:
+                body = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Disposition", 'attachment; filename="%s"' % name)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         return self._send(404, {"error": "not found"})
 
     def do_POST(self):
@@ -455,6 +486,65 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(CAPTURES, name), "wb") as f:
                 f.write(img)
             return self._send(200, {"ok": True, "file": name})
+
+        if path == "/api/model":
+            # Attach a 3D model file to an existing item. Body:
+            #   {id, filename, data}  — data is base64 (a data: URL prefix is ok).
+            # The file lands in models/ as model-<ms>-<safe original name>.<ext>
+            # and its name is appended to the item's "models" array.
+            item_id = (payload.get("id") or "").strip()
+            filename = os.path.basename((payload.get("filename") or "").strip())
+            ext = os.path.splitext(filename)[1].lower()
+            if not item_id or not filename:
+                return self._send(400, {"error": "id and filename required"})
+            if ext not in MODEL_EXTS:
+                return self._send(400, {"error": "unsupported model type %r (allowed: %s)"
+                                        % (ext, ", ".join(MODEL_EXTS))})
+            data = payload.get("data", "")
+            if "," in data[:100]:            # tolerate a data: URL
+                data = data.split(",", 1)[1]
+            try:
+                blob = base64.b64decode(data)
+            except Exception:
+                return self._send(400, {"error": "bad base64 data"})
+            if not blob:
+                return self._send(400, {"error": "empty model data"})
+            inv = load_inv()
+            item = next((it for it in inv.get("items", []) if it.get("id") == item_id), None)
+            if not item:
+                return self._send(404, {"error": "item not found"})
+            stem = os.path.splitext(filename)[0]
+            safe = "".join(c if c.isalnum() or c in "-_." else "-" for c in stem)[:80] or "model"
+            name = "model-%d-%s%s" % (int(time.time() * 1000), safe, ext)
+            with open(os.path.join(MODELS, name), "wb") as f:
+                f.write(blob)
+            models = item.get("models") or []
+            models.append(name)
+            item["models"] = models
+            save_inv(inv)
+            return self._send(200, {"ok": True, "file": name, "id": item_id,
+                                    "models": models})
+
+        if path == "/api/model/delete":
+            # Detach a model from an item and delete the file from models/.
+            item_id = (payload.get("id") or "").strip()
+            fname = os.path.basename((payload.get("file") or "").strip())
+            if not item_id or not fname:
+                return self._send(400, {"error": "id and file required"})
+            inv = load_inv()
+            item = next((it for it in inv.get("items", []) if it.get("id") == item_id), None)
+            if not item:
+                return self._send(404, {"error": "item not found"})
+            models = item.get("models") or []
+            if fname not in models:
+                return self._send(404, {"error": "model not on this item"})
+            item["models"] = [m for m in models if m != fname]
+            save_inv(inv)
+            try:
+                os.remove(os.path.join(MODELS, fname))
+            except OSError:
+                pass
+            return self._send(200, {"ok": True, "models": item["models"]})
 
         if path == "/api/confirm":
             # User confirmed an item (one OR MORE captured frames) with
