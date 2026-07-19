@@ -50,8 +50,11 @@ mcp_server.py        # optional MCP server (stdlib): read/query, request_purchas
                      # attach_item_model / get_item_model / list_item_models (3D models)
 public/
   capture.html       # camera capture (multi-photo per item) + live inventory panel
-  dashboard.html     # editable dashboard (edit modal w/ inline camera, lightbox gallery)
+  dashboard.html     # editable dashboard (edit modal w/ inline camera, lightbox gallery,
+                     # + a 3D model viewer modal and per-item model attach/view/delete)
   wishlist.html      # the "To buy" page
+  vendor/o3dv/       # vendored Online3DViewer (MIT) + occt-import-js WASM for the 3D
+                     # viewer. Served at /vendor/ (stdlib static route). CDN-free.
 data/
   inventory.json     # the inventory: { "items": [ ... ] }
   wishlist.json      # purchase requests ("to buy"): { "wishlist": [ ... ] }  (gitignored)
@@ -153,6 +156,20 @@ model): allowed types `stl 3mf obj glb gltf step stp scad`. Files live in
 `models/` (gitignored, bind-mounted, backed up). Upload via `POST /api/model`
 (admin) with base64 data; download publicly via `GET /models/<file>`; detach via
 `POST /api/model/delete`. The item's `models` array mirrors `images`.
+
+**Dashboard 3D viewer.** Cards with models show a `🧊 3D` badge; clicking it (public,
+no login) opens a viewer modal that renders the model inline via vendored
+Online3DViewer (`public/vendor/o3dv/`, served by the stdlib `/vendor/` static
+route in `server.py`). STEP/STP render through occt-import-js WASM (bundled, no CDN).
+The edit modal (admin) has a "3D models" section to attach / view / delete. Gotchas
+worth remembering:
+- **o3dv needs ABSOLUTE model URLs** (`location.origin + '/models/…'`). Its STEP path
+  hands the URL to a Blob `Worker`, and blob workers throw "URL is invalid" on
+  root-relative paths. Relative URLs fail silently for meshes too.
+- The occt CDN base is **hardcoded** in `o3dv.min.js`; the vendored copy is patched
+  (`sed`) to `location.origin+"/vendor/o3dv/"` so it stays CDN-free and CSP-safe.
+- Cloudflare caches `/vendor/*.js` (4h). Bump the `?v=` query on the o3dv `<script>`
+  when you re-patch it; the dashboard HTML itself is not edge-cached.
 **MCP tools**: `attach_item_model` (uploads a local file; needs
 `INVENTORY_ADMIN_USER`/`INVENTORY_ADMIN_PASS` in the MCP server env),
 `get_item_model` (downloads an item's models to a local dir, default a temp dir;

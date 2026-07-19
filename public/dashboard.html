@@ -300,6 +300,39 @@
            padding: 11px 16px; border-radius: 10px; font-size: 14px; box-shadow: 0 8px 24px #0008; animation: rise .2s ease; }
   .toast.err { border-left-color: var(--red); }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+  /* 3D model badge on cards */
+  .model-badge { position: absolute; bottom: 8px; left: 8px; background: #14243acc; border: 1px solid #2b6cb0;
+          color: #bfe0ff; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer;
+          backdrop-filter: blur(4px); z-index: 3; user-select: none; }
+  .model-badge:hover { background: #1c3654e0; border-color: #4a90d9; }
+
+  /* 3D viewer modal */
+  .viewer { position: fixed; inset: 0; background: #06090dee; display: none; flex-direction: column; z-index: 90; }
+  .viewer.show { display: flex; }
+  .viewer .v-head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .viewer .v-title { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .viewer .v-tabs { display: flex; gap: 6px; flex: 1; overflow-x: auto; }
+  .viewer .v-tab { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line2); background: var(--panel);
+          color: var(--dim2); cursor: pointer; white-space: nowrap; }
+  .viewer .v-tab.on { background: #1c3654; border-color: #4a90d9; color: #bfe0ff; }
+  .viewer .v-canvas { flex: 1; position: relative; min-height: 0; }
+  .viewer .v-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: var(--dim2);
+          font-size: 14px; pointer-events: none; z-index: 2; }
+  /* o3dv injects its own unstyled progress <div>; hide it (keep in DOM so o3dv doesn't null-crash) and use our status instead */
+  #viewer-canvas > div:not(#viewer-status) { display: none !important; }
+  .viewer .v-hint { padding: 6px 18px; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line); text-align: center; }
+  .viewer .btn.icon { font-size: 18px; line-height: 1; padding: 6px 12px; }
+
+  /* 3D models section in the edit modal */
+  .edit-models { display: flex; flex-direction: column; gap: 8px; }
+  .edit-models .m-row { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line2);
+          border-radius: 8px; padding: 8px 10px; }
+  .edit-models .m-row .m-ico { font-size: 16px; }
+  .edit-models .m-row .m-name { flex: 1; font-size: 13px; color: var(--text); word-break: break-all; }
+  .edit-models .m-row .m-ext { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--dim2);
+          border: 1px solid var(--line2); border-radius: 4px; padding: 1px 5px; }
+  .edit-models .m-empty { font-size: 13px; color: var(--dim); }
 </style>
 </head>
 <body>
@@ -380,6 +413,13 @@
           <button type="button" class="btn" id="add-photo-btn">📷 Add photo</button>
           <div class="status-line" style="margin-top:6px">Added photos are re-examined to enrich this item's info.</div>
         </div>
+        <div class="field full" id="edit-models-wrap">
+          <label>3D models <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— STL / 3MF / OBJ / GLB / STEP</span></label>
+          <div class="edit-models" id="edit-models"></div>
+          <input type="file" id="model-file" accept=".stl,.3mf,.obj,.glb,.gltf,.step,.stp,.scad" style="display:none">
+          <button type="button" class="btn" id="add-model-btn" style="margin-top:8px">＋ Attach 3D model</button>
+          <div class="status-line" id="model-status" style="margin-top:6px"></div>
+        </div>
       </div>
       <datalist id="cats-list"></datalist>
       <datalist id="locs-list"></datalist>
@@ -434,8 +474,23 @@
     <button class="lb-nav next" id="lb-next">›</button>
     <div class="lb-cap" id="lb-cap"></div>
   </div>
+  <!-- 3D model viewer -->
+  <div class="viewer" id="viewer">
+    <div class="v-head">
+      <span class="v-title" id="viewer-title">3D model</span>
+      <div class="v-tabs" id="viewer-tabs"></div>
+      <a class="btn" id="viewer-dl" href="#" download>⬇ Download</a>
+      <button class="btn icon" id="viewer-close" title="Close">✕</button>
+    </div>
+    <div class="v-canvas" id="viewer-canvas">
+      <div class="v-status" id="viewer-status"></div>
+    </div>
+    <div class="v-hint">Drag to rotate · scroll to zoom · right-drag to pan</div>
+  </div>
+
   <div class="toasts" id="toasts"></div>
 
+<script src="/vendor/o3dv/o3dv.min.js?v=2"></script>
 <script>
 let ITEMS = [];
 let editingId = null;       // id being edited, or "__new__", or null
@@ -611,6 +666,7 @@ function render() {
       <div class="thumb-wrap" data-zoom="${imgs.length ? '1' : ''}">
         ${imgs.length ? `<img src="/captures/${esc(imgs[0])}" alt="">` : `<div class="nothumb">📦</div>`}
         ${imgs.length > 1 ? `<span class="photo-count">📷 ${imgs.length}</span>` : ``}
+        ${(it.models && it.models.length) ? `<span class="model-badge" data-act="view3d" title="View 3D model">🧊 3D${it.models.length > 1 ? ' · ' + it.models.length : ''}</span>` : ``}
         ${flagged ? `<span class="flag">check</span>` : ``}
         ${isAdmin ? `<div class="qty-badge">
           <button data-act="dec">−</button>
@@ -764,6 +820,7 @@ $('grid').addEventListener('click', async e => {
     return;
   }
   if (act === 'edit') return openEdit(id);
+  if (act === 'view3d') { e.stopPropagation(); return openViewer(id, 0); }
   if (zoom) {
     const it = ITEMS.find(x => x.id === id);
     const imgs = it && (it.images || (it.image ? [it.image] : []));
@@ -805,6 +862,8 @@ function openEdit(id) {
   origImages = (it.images || (it.image ? [it.image] : [])).slice();
   editImages = origImages.slice();
   renderEditStrip();
+  $('model-status').textContent = '';
+  renderEditModels();
   hideEditCam();
   $('dup-notice').classList.remove('show');
   $('wish-notice').classList.remove('show');   // wishlist match is for new adds only
@@ -820,6 +879,7 @@ function openAdd() {
   $('del-btn').style.display = 'none';
   origImages = []; editImages = [];
   renderEditStrip();
+  renderEditModels();
   hideEditCam();
   checkDup();
   checkWish();
@@ -1061,10 +1121,112 @@ $('del-btn').addEventListener('click', async () => {
   else toast('Delete failed', true);
 });
 
+// ---- 3D model viewer (online-3d-viewer, vendored, CDN-free) ----
+let ovViewer = null, viewerModels = [], viewerIdx = 0;
+const MODEL_EXT = f => (String(f).split('.').pop() || '').toLowerCase();
+const shortModelName = f => String(f).replace(/^model-\d+-/, '');   // drop the server's "model-<ms>-" prefix
+
+function openViewer(id, idx) {
+  const it = ITEMS.find(x => x.id === id); if (!it) return;
+  const models = it.models || []; if (!models.length) return;
+  viewerModels = models;
+  viewerIdx = Math.min(Math.max(0, idx || 0), models.length - 1);
+  $('viewer-title').textContent = it.name || 'Item';
+  renderViewerTabs();
+  $('viewer').classList.add('show');   // display:flex gives the canvas host its size synchronously
+  loadViewerModel();                   // direct call (rAF is throttled in background tabs)
+}
+function renderViewerTabs() {
+  $('viewer-tabs').innerHTML = viewerModels.length > 1
+    ? viewerModels.map((f, i) => `<button class="v-tab ${i === viewerIdx ? 'on' : ''}" data-i="${i}">${esc(shortModelName(f))}</button>`).join('')
+    : '';
+}
+function loadViewerModel() {
+  const file = viewerModels[viewerIdx];
+  // o3dv fetches this URL and (for STEP) hands it to a blob Worker that can't
+  // resolve root-relative paths — so it MUST be absolute.
+  const url = location.origin + '/models/' + encodeURIComponent(file);
+  $('viewer-dl').href = url;
+  $('viewer-dl').setAttribute('download', shortModelName(file));
+  const host = $('viewer-canvas');
+  if (typeof OV === 'undefined') { $('viewer-status').textContent = '3D viewer library failed to load.'; return; }
+  $('viewer-status').textContent = 'Loading ' + shortModelName(file) + ' …';
+  if (!ovViewer) {
+    ovViewer = new OV.EmbeddedViewer(host, {
+      // medium background + light edges so BOTH light meshes (STL) and dark
+      // baked-color models (STEP parts are often near-black) stay legible.
+      backgroundColor: new OV.RGBAColor(58, 64, 74, 255),
+      defaultColor: new OV.RGBColor(200, 205, 214),
+      edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(150, 158, 172), 45),
+      onModelLoaded: () => { $('viewer-status').textContent = ''; },
+      onModelLoadFailed: () => { $('viewer-status').textContent = 'Could not render this file — use ⬇ Download to open it locally.'; },
+    });
+  }
+  ovViewer.LoadModelFromUrlList([url]);
+}
+function closeViewer() { $('viewer').classList.remove('show'); }
+$('viewer-close').addEventListener('click', closeViewer);
+$('viewer').addEventListener('click', e => { if (e.target === $('viewer')) closeViewer(); });
+$('viewer-tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-i]'); if (!b) return;
+  viewerIdx = +b.dataset.i; renderViewerTabs(); loadViewerModel();
+});
+
+// ---- 3D models management in the edit modal ----
+function renderEditModels() {
+  const wrap = $('edit-models-wrap');
+  if (editingId === '__new__' || !editingId) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  const it = ITEMS.find(x => x.id === editingId);
+  const models = (it && it.models) || [];
+  $('edit-models').innerHTML = models.length
+    ? models.map(f => `
+      <div class="m-row" data-file="${esc(f)}">
+        <span class="m-ico">🧊</span>
+        <span class="m-name">${esc(shortModelName(f))}</span>
+        <span class="m-ext">${esc(MODEL_EXT(f))}</span>
+        <button type="button" class="btn" data-mview="${esc(f)}">View</button>
+        <a class="btn" href="/models/${encodeURIComponent(f)}" download="${esc(shortModelName(f))}" title="Download">⬇</a>
+        <button type="button" class="btn danger" data-mdel="${esc(f)}">Delete</button>
+      </div>`).join('')
+    : `<div class="m-empty">No 3D models yet.</div>`;
+}
+$('edit-models').addEventListener('click', async e => {
+  const vf = e.target.closest('[data-mview]')?.dataset.mview;
+  if (vf) { const i = (ITEMS.find(x => x.id === editingId)?.models || []).indexOf(vf); return openViewer(editingId, Math.max(0, i)); }
+  const df = e.target.closest('[data-mdel]')?.dataset.mdel;
+  if (df) {
+    if (!confirm('Detach and delete this 3D model? This can\'t be undone.')) return;
+    const res = await api('/api/model/delete', { id: editingId, file: df });
+    if (res.ok) {
+      const it = ITEMS.find(x => x.id === editingId); if (it) it.models = res.models || [];
+      renderEditModels(); toast('Model removed');
+    } else toast(res.error || 'Delete failed', true);
+  }
+});
+$('add-model-btn').addEventListener('click', () => $('model-file').click());
+$('model-file').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  e.target.value = '';
+  if (!['stl','3mf','obj','glb','gltf','step','stp','scad'].includes(MODEL_EXT(file.name))) { toast('Unsupported 3D file type', true); return; }
+  $('model-status').textContent = 'Uploading ' + file.name + ' …';
+  try {
+    const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+    const resp = await api('/api/model', { id: editingId, filename: file.name, data });
+    if (resp.ok) {
+      const it = ITEMS.find(x => x.id === editingId); if (it) it.models = resp.models || [];
+      renderEditModels(); $('model-status').textContent = 'Attached ✓'; toast('3D model attached');
+    } else { $('model-status').textContent = ''; toast(resp.error || 'Upload failed', true); }
+  } catch (err) { $('model-status').textContent = ''; toast('Upload failed', true); }
+});
+
 // lightbox + keyboard
 $('lightbox').addEventListener('click', () => $('lightbox').classList.remove('show'));
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal(); $('lightbox').classList.remove('show'); }
+  if (e.key === 'Escape') {
+    if ($('viewer').classList.contains('show')) { closeViewer(); return; }
+    closeModal(); $('lightbox').classList.remove('show');
+  }
   if (e.key === 'Enter' && editingId && document.activeElement.tagName !== 'TEXTAREA') $('save-btn').click();
   if ($('lightbox').classList.contains('show') && lbImgs.length > 1) {
     if (e.key === 'ArrowLeft') lbStep(-1);

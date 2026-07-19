@@ -237,6 +237,10 @@ CONTENT_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".json": "application/json",
+    ".js": "application/javascript; charset=utf-8",
+    ".mjs": "application/javascript; charset=utf-8",
+    ".wasm": "application/wasm",
+    ".css": "text/css; charset=utf-8",
 }
 
 
@@ -289,6 +293,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_file(os.path.join(PUBLIC, "capture.html"))
         if path == "/buy" or path == "/wishlist":
             return self._serve_file(os.path.join(PUBLIC, "wishlist.html"))
+        if path.startswith("/vendor/"):
+            # Vendored static assets (the 3D viewer library + its wasm). No path
+            # traversal: collapse the request and refuse anything outside public/vendor.
+            rel = os.path.normpath(path.lstrip("/"))
+            if rel.startswith("vendor" + os.sep) or rel == "vendor":
+                return self._serve_file(os.path.join(PUBLIC, rel))
+            return self._send(404, {"error": "not found"})
         if path == "/api/inventory":
             with open(INVENTORY) as f:
                 return self._send(200, f.read(), "application/json")

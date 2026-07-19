@@ -1,0 +1,7 @@
+Vendored third-party assets for the dashboard 3D model viewer (CDN-free):
+
+- o3dv.min.js  — Online3DViewer 0.18.0 (MIT). https://github.com/kovacsv/Online3DViewer
+    Patched: the hardcoded occt-import-js CDN base URL is rewritten to
+    location.origin + "/vendor/o3dv/" so STEP loading stays self-hosted.
+- occt-import-js.{js,wasm}, occt-import-js-worker.js — occt-import-js 0.0.22 (MIT),
+    which wraps OpenCASCADE (LGPL-2.1). See license.occt-import-js.txt / license.occt.txt.
