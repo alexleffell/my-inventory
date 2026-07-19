@@ -82,6 +82,32 @@ def load_inv():
         return json.load(f)
 
 
+def query_items(items, search, category, location, has_model, limit):
+    fields = ("id", "name", "category", "quantity", "location", "condition", "notes", "images", "models")
+    terms = (search or "").lower().split()
+    category, location = (category or "").lower(), (location or "").lower()
+    matches = []
+    for it in items:
+        models = it.get("models") or []
+        if category and category != (it.get("category", "") or "").lower():
+            continue
+        if location and location != (it.get("location", "") or "").lower():
+            continue
+        if has_model is not None and bool(models) != has_model:
+            continue
+        name = str(it.get("name", "") or "").lower()
+        catloc = " ".join(str(it.get(k, "") or "") for k in ("category", "location")).lower()
+        detail = " ".join([str(it.get("notes", "") or "")] + [str(model) for model in models]).lower()
+        if terms and not all(term in " ".join((name, catloc, detail)) for term in terms):
+            continue
+        score = sum(3 * (term in name) + 2 * (term in catloc) + (term in detail) for term in terms)
+        matches.append((score, it))
+    if terms:
+        matches = sorted(matches, key=lambda match: -match[0])
+    res = [{k: it.get(k) for k in fields} for score, it in matches]
+    return res[:limit] if limit > 0 else res
+
+
 def save_inv(inv):
     # Safety net: if a write would wipe a previously non-empty inventory to
     # zero items, stash an extra timestamped emergency copy first (never lose data).
@@ -334,27 +360,17 @@ class Handler(BaseHTTPRequestHandler):
                               "status": "identifying"})
             return self._send(200, {"count": len(q), "queue": q})
         if path == "/api/query":
-            # Public search/filter. Params: search|q, category, location, limit.
+            # Public search/filter. Params: search|q, category, location, has_model, limit.
             qs = parse_qs(urlparse(self.path).query)
             g = lambda k: (qs.get(k, [""])[0] or "").strip()
-            search = (g("search") or g("q")).lower()
-            cat, loc = g("category").lower(), g("location").lower()
+            search = g("search") or g("q")
+            cat, loc, model = g("category"), g("location"), g("has_model").lower()
+            has_model = True if model in ("1", "true", "yes") else False if model in ("0", "false", "no") else None
             try:
                 limit = int(g("limit") or 0)
             except ValueError:
                 limit = 0
-            res = []
-            for it in load_inv().get("items", []):
-                hay = " ".join(str(it.get(k, "")) for k in ("name", "category", "location", "notes")).lower()
-                if search and search not in hay:
-                    continue
-                if cat and cat != (it.get("category", "") or "").lower():
-                    continue
-                if loc and loc != (it.get("location", "") or "").lower():
-                    continue
-                res.append({k: it.get(k) for k in ("id", "name", "category", "quantity", "location", "condition", "notes", "images", "models")})
-            if limit > 0:
-                res = res[:limit]
+            res = query_items(load_inv().get("items", []), search, cat, loc, has_model, limit)
             return self._send(200, {"count": len(res), "items": res})
         if path.startswith("/captures/"):
             name = os.path.basename(path)

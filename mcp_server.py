@@ -116,7 +116,7 @@ TOOLS = [
     },
     {
         "name": "search_inventory",
-        "description": "Search/filter the inventory. 'query' is free text matched across name, category, location and notes; 'category'/'location' restrict to an exact match; 'limit' caps results.",
+        "description": "Search/filter the inventory. 'query' is free text matched across name, category, location, notes, and model filenames; 'category'/'location' restrict to an exact match; 'limit' caps results. Results include each item's 'models' field (attached 3D CAD/print files). 'has_model' filters to items that do (true) or don't (false) have models attached.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -124,12 +124,18 @@ TOOLS = [
                 "category": {"type": "string", "description": "exact category, e.g. Sensors"},
                 "location": {"type": "string", "description": "exact bag/bin, e.g. Bag 6"},
                 "limit": {"type": "integer", "description": "max results (default 50)"},
+                "has_model": {"type": "boolean", "description": "if true, only items with 3D models; if false, only items without"},
             },
         },
     },
     {
         "name": "list_all_items",
         "description": "Return the full inventory (every item with all fields).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "list_item_models",
+        "description": "List every inventory item that has at least one 3D model attached (STL/3MF/OBJ/GLB/GLTF/STEP/SCAD). Returns id, name, category, location, and each model's filename plus public download URL.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
@@ -287,7 +293,12 @@ def _get_model(args):
         out = os.path.join(save_dir, os.path.basename(fn))
         with open(out, "wb") as f:
             f.write(raw)
-        saved.append({"file": fn, "saved_to": out, "bytes": len(raw)})
+        saved.append({
+            "file": fn,
+            "saved_to": out,
+            "bytes": len(raw),
+            "url": BASE + "/models/" + fn,
+        })
     return {"ok": True, "models": saved}
 
 
@@ -295,15 +306,35 @@ def call_tool(name, args):
     if name == "inventory_summary":
         return _get("/api/summary")
     if name == "search_inventory":
-        qs = urlencode({
+        params = {
             "search": args.get("query", "") or "",
             "category": args.get("category", "") or "",
             "location": args.get("location", "") or "",
             "limit": args.get("limit", 50) or 50,
-        })
-        return _get("/api/query?" + qs)
+        }
+        if "has_model" in args:
+            params["has_model"] = "1" if args.get("has_model") else "0"
+        return _get("/api/query?" + urlencode(params))
     if name == "list_all_items":
         return _get("/api/inventory")
+    if name == "list_item_models":
+        items = _get("/api/inventory").get("items", [])
+        out = []
+        for it in items:
+            models = it.get("models") or []
+            if not isinstance(models, list) or not models:
+                continue
+            out.append({
+                "id": it.get("id"),
+                "name": it.get("name"),
+                "category": it.get("category"),
+                "location": it.get("location"),
+                "models": [
+                    {"file": fn, "url": BASE + "/models/" + fn}
+                    for fn in models
+                ],
+            })
+        return {"items": out, "count": len(out)}
     if name == "get_item_images":
         return _item_images(args)
     if name == "list_wishlist":

@@ -33,6 +33,10 @@ The inventory can take real effort to build. Treat `data/`, `captures/` and
   folder (timestamped + zip, read-only, pruned). Schedule it (cron/launchd).
   `scripts/backup.sh latest` does a fast in-place mirror (no timestamp/zip/prune).
   Configure with `VPS_HOST` (+ optional `VPS_USER`, `VPS_PATH`, `BACKUP_DEST`).
+- `scripts/restore.sh [SOURCE_DIR]` is the inverse: pushes a local backup's
+  `data/`/`captures/`/`models/` back UP to the VPS (recovery only). It **excludes
+  `users.json` and `*.bak`** and requires typing `yes`. Defaults SOURCE_DIR to
+  `$BACKUP_DEST/latest`.
 - Rules for any agent/script: back up before destructive ops; never `rm -rf`
   `data`/`captures`; never `git checkout`/`git clean` over them without a backup.
   `data/users.json`, `data/*.bak`, `data/pending.json`, `data/wishlist.json` are
@@ -43,7 +47,7 @@ The inventory can take real effort to build. Treat `data/`, `captures/` and
 ```
 server.py            # tiny stdlib HTTP server (ThreadingHTTPServer) on :8770
 mcp_server.py        # optional MCP server (stdlib): read/query, request_purchase,
-                     # attach_item_model / get_item_model (3D models)
+                     # attach_item_model / get_item_model / list_item_models (3D models)
 public/
   capture.html       # camera capture (multi-photo per item) + live inventory panel
   dashboard.html     # editable dashboard (edit modal w/ inline camera, lightbox gallery)
@@ -104,7 +108,7 @@ hardcoded.
 |----------------------|-------------------------------------------------------------|
 | `GET /api/inventory` | Returns `inventory.json` (full).                            |
 | `GET /api/summary`   | Public overview: totals + category/location breakdown + wishlist counts. |
-| `GET /api/query`     | Public search/filter: `?search=&category=&location=&limit=`.|
+| `GET /api/query`     | Public search/filter: `?search=&category=&location=&has_model=&limit=`. `search` is multi-term (AND), ranked (name > category/location > notes/model-filenames); model filenames are searchable; `has_model=1/0` filters items with/without 3D models. Logic lives in the pure `query_items()` helper. |
 | `GET /api/queue`     | Public: uploads awaiting identification (a "⏳ Identifying…" strip). |
 | `POST /api/capture`  | `{image: dataURL}` → saves PNG, returns `{file}`.           |
 | `POST /api/confirm`  | `{files:[...], quantity, note, location}` → writes one sidecar for the item. |
@@ -150,8 +154,12 @@ model): allowed types `stl 3mf obj glb gltf step stp scad`. Files live in
 (admin) with base64 data; download publicly via `GET /models/<file>`; detach via
 `POST /api/model/delete`. The item's `models` array mirrors `images`.
 **MCP tools**: `attach_item_model` (uploads a local file; needs
-`INVENTORY_ADMIN_USER`/`INVENTORY_ADMIN_PASS` in the MCP server env) and
-`get_item_model` (downloads an item's models to a local dir, default a temp dir).
+`INVENTORY_ADMIN_USER`/`INVENTORY_ADMIN_PASS` in the MCP server env),
+`get_item_model` (downloads an item's models to a local dir, default a temp dir;
+also returns each model's public URL), and `list_item_models` (lists every item
+that has models, with filenames + public download URLs). `search_inventory` takes
+a `has_model` flag and searches model filenames. `tests/test_models_roundtrip.py`
+covers the attach/list/download/delete cycle against a throwaway server copy.
 
 ## Duplicate handling (resolved in the WEB APP, never the terminal)
 
