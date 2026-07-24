@@ -161,8 +161,8 @@
               background: #122033; border-bottom: 1px solid var(--line2); }
   .sm-dhead b { font-size: 14px; }
   .sm-dhead .sm-sub { color: var(--dim); font-size: 12px; }
-  .sm-dhead .sm-close { margin-left: auto; background: none; border: 1px solid var(--line2);
-              color: var(--dim); border-radius: 7px; width: 26px; height: 26px; font-size: 15px; line-height: 1; }
+  .sm-dhead .sm-close { margin-left: auto; flex-shrink: 0; background: none; border: 1px solid var(--line2);
+              color: var(--dim); border-radius: 7px; width: 32px; height: 32px; font-size: 18px; line-height: 1; cursor: pointer; }
   .sm-dhead .sm-close:hover { color: var(--text); border-color: var(--blue); }
   .sm-items { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 13px; }
   .sm-item { width: 94px; }
@@ -225,21 +225,28 @@
   .dup-status.ok { color: #3fb950; font-weight: 600; }
   .dup-status.err { color: #ff7b72; }
 
-  /* modal */
+  /* modal — head + foot stay pinned; only the body scrolls (laptop-safe close) */
   .overlay { position: fixed; inset: 0; background: #00000099; backdrop-filter: blur(3px); display: none;
-             align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+             align-items: center; justify-content: center; z-index: 50; padding: 16px; }
   .overlay.show { display: flex; }
   .modal { background: var(--panel); border: 1px solid var(--line2); border-radius: 16px; width: 100%; max-width: 560px;
-           max-height: 92vh; overflow: auto; }
-  .modal h3 { margin: 0; padding: 18px 20px; border-bottom: 1px solid var(--line); font-size: 16px; }
+           max-height: min(92vh, 100%); display: flex; flex-direction: column; overflow: hidden; }
+  .modal-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px 14px 20px;
+                border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .modal-head h3 { margin: 0; flex: 1; min-width: 0; font-size: 16px; }
+  .modal-x { flex-shrink: 0; width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--line2);
+             background: var(--panel2); color: var(--dim2); font-size: 18px; line-height: 1; cursor: pointer;
+             display: inline-flex; align-items: center; justify-content: center; }
+  .modal-x:hover { color: var(--text); border-color: #3a4654; background: #1a222c; }
+  .modal-body { overflow-y: auto; flex: 1; min-height: 0; -webkit-overflow-scrolling: touch; }
   .modal .form { padding: 18px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .modal .form .full { grid-column: 1 / -1; }
   .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); margin-bottom: 5px; }
   .field input, .field select, .field textarea {
     width: 100%; border-radius: 9px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 11px; }
   .field textarea { resize: vertical; min-height: 64px; }
-  .modal .foot { display: flex; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); align-items: center; }
-  .modal .foot .spacer { flex: 1; }
+  .modal .foot { display: flex; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line); align-items: center;
+                 flex-shrink: 0; background: var(--panel); }
   .status-line { color: var(--dim); font-size: 12px; }
   .dup-notice { display: none; margin: 0 20px; padding: 11px 13px; border-radius: 10px;
                 background: #bb800918; border: 1px solid #bb800966; font-size: 13px; }
@@ -287,6 +294,11 @@
   .lightbox { position: fixed; inset: 0; background: #000000e0; display: none; align-items: center; justify-content: center; z-index: 60; padding: 30px; }
   .lightbox.show { display: flex; }
   .lightbox img { max-width: 86%; max-height: 92%; border-radius: 12px; }
+  .lb-close { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right));
+              z-index: 3; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line2);
+              background: #0a0e13cc; color: #fff; font-size: 20px; line-height: 1; cursor: pointer;
+              display: inline-flex; align-items: center; justify-content: center; backdrop-filter: blur(6px); }
+  .lb-close:hover { background: #1a222ccc; border-color: #3a4654; }
   .lb-nav { position: absolute; top: 50%; transform: translateY(-50%); background: #ffffff14; border: 1px solid var(--line2);
             color: #fff; width: 48px; height: 64px; border-radius: 12px; font-size: 30px; line-height: 1; }
   .lb-nav:hover { background: #ffffff26; }
@@ -310,19 +322,22 @@
   /* 3D viewer modal */
   .viewer { position: fixed; inset: 0; background: #06090dee; display: none; flex-direction: column; z-index: 90; }
   .viewer.show { display: flex; }
-  .viewer .v-head { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
-  .viewer .v-title { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .viewer .v-tabs { display: flex; gap: 6px; flex: 1; overflow-x: auto; }
+  .viewer .v-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 18px; border-bottom: 1px solid var(--line);
+          flex-shrink: 0; }
+  .viewer .v-title { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          min-width: 0; max-width: 40%; }
+  .viewer .v-tabs { display: flex; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; }
   .viewer .v-tab { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line2); background: var(--panel);
           color: var(--dim2); cursor: pointer; white-space: nowrap; }
   .viewer .v-tab.on { background: #1c3654; border-color: #4a90d9; color: #bfe0ff; }
+  .viewer .v-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
   .viewer .v-canvas { flex: 1; position: relative; min-height: 0; }
   .viewer .v-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: var(--dim2);
           font-size: 14px; pointer-events: none; z-index: 2; }
   /* o3dv injects its own unstyled progress <div>; hide it (keep in DOM so o3dv doesn't null-crash) and use our status instead */
   #viewer-canvas > div:not(#viewer-status) { display: none !important; }
   .viewer .v-hint { padding: 6px 18px; font-size: 12px; color: var(--dim); border-top: 1px solid var(--line); text-align: center; }
-  .viewer .btn.icon { font-size: 18px; line-height: 1; padding: 6px 12px; }
+  .viewer .btn.icon { font-size: 18px; line-height: 1; padding: 6px 12px; min-width: 40px; min-height: 36px; }
 
   /* 3D models section in the edit modal */
   .edit-models { display: flex; flex-direction: column; gap: 8px; }
@@ -342,6 +357,7 @@
       <span class="live"><span class="dot"></span> live</span>
       <div class="hactions">
         <a class="btn" id="capture-link" href="/capture">📷 Capture</a>
+        <a class="btn" id="fulllist-link" href="/api/inventory" target="_blank" rel="noopener">🗂 Full list</a>
         <button class="btn primary" id="add-btn">+ Add item</button>
         <button class="btn" id="users-btn">👥 Users</button>
         <button class="btn" id="login-btn">Log in</button>
@@ -387,42 +403,47 @@
   <!-- edit / add modal -->
   <div class="overlay" id="overlay">
     <div class="modal">
-      <h3 id="modal-title">Edit item</h3>
-      <div id="dup-notice" class="dup-notice"></div>
-      <div id="wish-notice" class="wish-notice"></div>
-      <div class="form">
-        <div class="field full"><label>Name <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— optional, leave blank and I'll identify it from the photo</span></label><input id="f-name" placeholder="Leave blank to auto-identify from the photo"></div>
-        <div class="field"><label>Category</label><input id="f-category" list="cats-list" placeholder="e.g. Resistors"></div>
-        <div class="field"><label>Quantity</label><input id="f-quantity" type="number" min="0" value="1"></div>
-        <div class="field"><label>Location</label><input id="f-location" list="locs-list" placeholder="e.g. Bag 1"></div>
-        <div class="field"><label>Condition</label><input id="f-condition" placeholder="e.g. New (sealed)"></div>
-        <div class="field full"><label>Notes</label><textarea id="f-notes" placeholder="SKU, specs, anything useful…"></textarea></div>
-        <div class="field full">
-          <label>Photos</label>
-          <div class="edit-strip" id="edit-strip"></div>
-          <div class="cam-area" id="cam-area">
-            <select id="edit-cam"></select>
-            <video id="edit-video" autoplay playsinline muted></video>
-            <div id="edit-cam-controls" class="cam-controls"></div>
-            <div class="cam-btns">
-              <button type="button" class="btn primary" id="edit-snap">📸 Capture</button>
-              <button type="button" class="btn" id="edit-cam-close">Close camera</button>
-              <span class="status-line" id="edit-cam-status"></span>
-            </div>
-          </div>
-          <button type="button" class="btn" id="add-photo-btn">📷 Add photo</button>
-          <div class="status-line" style="margin-top:6px">Added photos are re-examined to enrich this item's info.</div>
-        </div>
-        <div class="field full" id="edit-models-wrap">
-          <label>3D models <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— STL / 3MF / OBJ / GLB / STEP</span></label>
-          <div class="edit-models" id="edit-models"></div>
-          <input type="file" id="model-file" accept=".stl,.3mf,.obj,.glb,.gltf,.step,.stp,.scad" style="display:none">
-          <button type="button" class="btn" id="add-model-btn" style="margin-top:8px">＋ Attach 3D model</button>
-          <div class="status-line" id="model-status" style="margin-top:6px"></div>
-        </div>
+      <div class="modal-head">
+        <h3 id="modal-title">Edit item</h3>
+        <button type="button" class="modal-x" id="modal-x" title="Close" aria-label="Close">✕</button>
       </div>
-      <datalist id="cats-list"></datalist>
-      <datalist id="locs-list"></datalist>
+      <div class="modal-body">
+        <div id="dup-notice" class="dup-notice"></div>
+        <div id="wish-notice" class="wish-notice"></div>
+        <div class="form">
+          <div class="field full"><label>Name <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— optional, leave blank and I'll identify it from the photo</span></label><input id="f-name" placeholder="Leave blank to auto-identify from the photo"></div>
+          <div class="field"><label>Category</label><input id="f-category" list="cats-list" placeholder="e.g. Resistors"></div>
+          <div class="field"><label>Quantity</label><input id="f-quantity" type="number" min="0" value="1"></div>
+          <div class="field"><label>Location</label><input id="f-location" list="locs-list" placeholder="e.g. Bag 1"></div>
+          <div class="field"><label>Condition</label><input id="f-condition" placeholder="e.g. New (sealed)"></div>
+          <div class="field full"><label>Notes</label><textarea id="f-notes" placeholder="SKU, specs, anything useful…"></textarea></div>
+          <div class="field full">
+            <label>Photos</label>
+            <div class="edit-strip" id="edit-strip"></div>
+            <div class="cam-area" id="cam-area">
+              <select id="edit-cam"></select>
+              <video id="edit-video" autoplay playsinline muted></video>
+              <div id="edit-cam-controls" class="cam-controls"></div>
+              <div class="cam-btns">
+                <button type="button" class="btn primary" id="edit-snap">📸 Capture</button>
+                <button type="button" class="btn" id="edit-cam-close">Close camera</button>
+                <span class="status-line" id="edit-cam-status"></span>
+              </div>
+            </div>
+            <button type="button" class="btn" id="add-photo-btn">📷 Add photo</button>
+            <div class="status-line" style="margin-top:6px">Added photos are re-examined to enrich this item's info.</div>
+          </div>
+          <div class="field full" id="edit-models-wrap">
+            <label>3D models <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— STL / 3MF / OBJ / GLB / STEP</span></label>
+            <div class="edit-models" id="edit-models"></div>
+            <input type="file" id="model-file" accept=".stl,.3mf,.obj,.glb,.gltf,.step,.stp,.scad" style="display:none">
+            <button type="button" class="btn" id="add-model-btn" style="margin-top:8px">＋ Attach 3D model</button>
+            <div class="status-line" id="model-status" style="margin-top:6px"></div>
+          </div>
+        </div>
+        <datalist id="cats-list"></datalist>
+        <datalist id="locs-list"></datalist>
+      </div>
       <div class="foot">
         <button class="btn danger" id="del-btn">Delete</button>
         <div class="spacer"></div>
@@ -435,11 +456,16 @@
   <!-- login -->
   <div class="overlay" id="login-overlay">
     <div class="modal" style="max-width:380px">
-      <h3 id="l-title">Log in to edit</h3>
-      <div class="form" style="grid-template-columns:1fr">
-        <div class="field full"><label>Username</label><input id="l-user" autocomplete="username"></div>
-        <div class="field full"><label>Password</label><input id="l-pass" type="password" autocomplete="current-password"></div>
-        <div class="field full"><div class="status-line" id="l-status">Viewing is public — log in for add/edit.</div></div>
+      <div class="modal-head">
+        <h3 id="l-title">Log in to edit</h3>
+        <button type="button" class="modal-x" id="l-x" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form" style="grid-template-columns:1fr">
+          <div class="field full"><label>Username</label><input id="l-user" autocomplete="username"></div>
+          <div class="field full"><label>Password</label><input id="l-pass" type="password" autocomplete="current-password"></div>
+          <div class="field full"><div class="status-line" id="l-status">Viewing is public — log in for add/edit.</div></div>
+        </div>
       </div>
       <div class="foot">
         <div class="spacer"></div>
@@ -452,12 +478,17 @@
   <!-- user management (admin) -->
   <div class="overlay" id="users-overlay">
     <div class="modal" style="max-width:460px">
-      <h3>👥 Users</h3>
-      <div class="users-list" id="users-list"></div>
-      <div class="form" style="border-top:1px solid var(--line);margin-top:6px">
-        <div class="field"><label>Username</label><input id="u-name" autocomplete="off" placeholder="new or existing"></div>
-        <div class="field"><label>Role</label><select id="u-role"><option value="admin">admin</option><option value="viewer">viewer</option></select></div>
-        <div class="field full"><label>Password <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— blank = keep existing (role-only change)</span></label><input id="u-pass" type="password" autocomplete="new-password" placeholder="set / reset password"></div>
+      <div class="modal-head">
+        <h3>👥 Users</h3>
+        <button type="button" class="modal-x" id="u-x" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="users-list" id="users-list"></div>
+        <div class="form" style="border-top:1px solid var(--line);margin-top:6px">
+          <div class="field"><label>Username</label><input id="u-name" autocomplete="off" placeholder="new or existing"></div>
+          <div class="field"><label>Role</label><select id="u-role"><option value="admin">admin</option><option value="viewer">viewer</option></select></div>
+          <div class="field full"><label>Password <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— blank = keep existing (role-only change)</span></label><input id="u-pass" type="password" autocomplete="new-password" placeholder="set / reset password"></div>
+        </div>
       </div>
       <div class="foot">
         <div class="status-line" id="u-status"></div>
@@ -469,6 +500,7 @@
   </div>
 
   <div class="lightbox" id="lightbox">
+    <button type="button" class="lb-close" id="lb-close" title="Close" aria-label="Close">✕</button>
     <button class="lb-nav prev" id="lb-prev">‹</button>
     <img id="lightbox-img" src="">
     <button class="lb-nav next" id="lb-next">›</button>
@@ -479,8 +511,10 @@
     <div class="v-head">
       <span class="v-title" id="viewer-title">3D model</span>
       <div class="v-tabs" id="viewer-tabs"></div>
-      <a class="btn" id="viewer-dl" href="#" download>⬇ Download</a>
-      <button class="btn icon" id="viewer-close" title="Close">✕</button>
+      <div class="v-actions">
+        <a class="btn" id="viewer-dl" href="#" download>⬇ Download</a>
+        <button class="btn icon" id="viewer-close" title="Close" aria-label="Close">✕</button>
+      </div>
     </div>
     <div class="v-canvas" id="viewer-canvas">
       <div class="v-status" id="viewer-status"></div>
@@ -570,6 +604,7 @@ $('login-btn').addEventListener('click', () => {
   }
 });
 $('l-cancel').addEventListener('click', () => $('login-overlay').classList.remove('show'));
+$('l-x').addEventListener('click', () => $('login-overlay').classList.remove('show'));
 $('login-overlay').addEventListener('click', e => { if (e.target === $('login-overlay')) $('login-overlay').classList.remove('show'); });
 async function doAuth() {
   const user = $('l-user').value.trim(), pass = $('l-pass').value;
@@ -623,6 +658,7 @@ async function loadUsers() {
 }
 $('users-btn').addEventListener('click', openUsers);
 $('u-cancel').addEventListener('click', () => $('users-overlay').classList.remove('show'));
+$('u-x').addEventListener('click', () => $('users-overlay').classList.remove('show'));
 $('users-overlay').addEventListener('click', e => { if (e.target === $('users-overlay')) $('users-overlay').classList.remove('show'); });
 async function submitUser() {
   const username = $('u-name').value.trim();
@@ -1085,6 +1121,7 @@ $('edit-cam-close').addEventListener('click', hideEditCam);
 
 $('add-btn').addEventListener('click', openAdd);
 $('cancel-btn').addEventListener('click', closeModal);
+$('modal-x').addEventListener('click', closeModal);
 $('overlay').addEventListener('click', e => { if (e.target === $('overlay')) closeModal(); });
 
 $('save-btn').addEventListener('click', async () => {
@@ -1221,11 +1258,16 @@ $('model-file').addEventListener('change', async e => {
 });
 
 // lightbox + keyboard
-$('lightbox').addEventListener('click', () => $('lightbox').classList.remove('show'));
+function closeLightbox() { $('lightbox').classList.remove('show'); }
+$('lightbox').addEventListener('click', closeLightbox);
+$('lb-close').addEventListener('click', e => { e.stopPropagation(); closeLightbox(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if ($('viewer').classList.contains('show')) { closeViewer(); return; }
-    closeModal(); $('lightbox').classList.remove('show');
+    if ($('lightbox').classList.contains('show')) { closeLightbox(); return; }
+    if ($('users-overlay').classList.contains('show')) { $('users-overlay').classList.remove('show'); return; }
+    if ($('login-overlay').classList.contains('show')) { $('login-overlay').classList.remove('show'); return; }
+    closeModal();
   }
   if (e.key === 'Enter' && editingId && document.activeElement.tagName !== 'TEXTAREA') $('save-btn').click();
   if ($('lightbox').classList.contains('show') && lbImgs.length > 1) {
