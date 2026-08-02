@@ -22,6 +22,19 @@ controls + a 📷 Capture link appear after admin login). `/capture` → the cap
 page (camera tool). `/buy` (alias `/wishlist`) → the "To buy" page (purchase
 requests). Requires only Python 3 (tested on 3.9+). No build step.
 
+HTML pages are served with `Last-Modified` + `Cache-Control: no-store`, and the
+server answers `HEAD` for the page routes. The dashboard polls `HEAD` on itself
+every 10s and self-reloads when `Last-Modified` changes (skipped while an edit
+modal is open) — deploys show up in open tabs without a manual refresh.
+
+The dashboard's design system: semantic CSS custom properties in `:root` of
+`dashboard.html` (surfaces `--bg/--panel*/--line*`, text `--text/--dim/--dim2`,
+status `--okfg/--warnfg/--redfg` + `*bg`/`*line` tints, `--focus`, radii
+`--r-ctl/--r-card/--r-modal`, shadows `--shadow-1/2`). New UI must use these
+tokens, not ad-hoc hex. Dialogs use `role="dialog"` + background `inert` via
+`showOverlay()/hideOverlay()` (focus restore included) — route any new overlay
+through those helpers.
+
 ## Data safety
 
 The inventory can take real effort to build. Treat `data/`, `captures/` and

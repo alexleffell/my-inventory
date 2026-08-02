@@ -11,6 +11,7 @@ Standard library only. Run:  python3 server.py
 """
 import json
 import base64
+import email.utils
 import time
 import os
 import sys
@@ -257,13 +258,27 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _serve_file(self, path):
+    def _serve_file(self, path, head_only=False):
         if not os.path.exists(path) or not os.path.isfile(path):
             return self._send(404, {"error": "not found"})
         ext = os.path.splitext(path)[1].lower()
         ctype = CONTENT_TYPES.get(ext, "application/octet-stream")
         with open(path, "rb") as f:
-            self._send(200, f.read(), ctype)
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        # Last-Modified lets pages self-reload after a deploy (HEAD poll).
+        self.send_header(
+            "Last-Modified",
+            email.utils.formatdate(os.path.getmtime(path), usegmt=True),
+        )
+        if ext == ".html":
+            self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if not head_only:
+            self.wfile.write(body)
 
     def _require(self, need):
         """Gate a request. need='viewer' allows viewer+admin; 'admin' admin only.
@@ -282,6 +297,20 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(403, {"error": "admin access required"})
         return None
+
+    def do_HEAD(self):
+        # HEAD on the HTML pages only — used by the pages' self-reload poll.
+        path = self.path.split("?")[0]
+        pages = {
+            "/": "dashboard.html", "/dashboard": "dashboard.html",
+            "/capture": "capture.html", "/buy": "wishlist.html", "/wishlist": "wishlist.html",
+        }
+        name = pages.get(path)
+        if not name:
+            self.send_response(404)
+            self.end_headers()
+            return
+        self._serve_file(os.path.join(PUBLIC, name), head_only=True)
 
     def do_GET(self):
         path = self.path.split("?")[0]
