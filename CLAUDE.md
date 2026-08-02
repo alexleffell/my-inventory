@@ -107,15 +107,17 @@ the user has confirmed. To find unprocessed captures: list `captures/*.json` who
 `files` are not already in any item's `images` in `inventory.json`. (Legacy sidecars
 may have a single `file` field instead of `files`.)
 
-### Adding photos to an existing item (re-examine / enrich)
+### Adding photos to an existing item (re-examine / enrich / identify)
 The dashboard edit modal has an inline camera ("Add photo") and a removable photo
 strip. Saving an edit sends the full `images` array via `POST /api/update`. When the
 new list contains photos the item didn't have before, the server writes a
-`captures/review-<ms>.json` marker `{id, images, reason}`. An agent can watch for
-these to enrich the item (fill specs/SKU from a label, resolve an `unconfirmed`
-value), then delete the marker. Two trigger types share the `captures/*.json`
-watcher: `cap-*.json` (new item) and `review-*.json` (enrich existing); dispatch by
-filename prefix.
+`captures/review-<ms>.json` marker `{id, images, reason}`. The ✨ Identify button
+(`POST /api/identify`) writes the same marker with reason
+`identify requested from dashboard`. An agent watches for these to enrich or
+re-identify the item (fill specs/SKU from a label, resolve an `unconfirmed`
+value), then deletes the marker. Two trigger types share the `captures/*.json`
+watcher: `cap-*.json` (new item) and `review-*.json` (enrich/identify existing);
+dispatch by filename prefix. The `reason` field says why the marker exists.
 
 ### Optional: remote server + agent bridge
 Captures need a camera (usually a laptop/phone). The app can also run on a remote
@@ -134,9 +136,9 @@ hardcoded.
 | `GET /api/inventory` | Returns `inventory.json` (full).                            |
 | `GET /api/summary`   | Public overview: totals + category/location breakdown + wishlist counts. |
 | `GET /api/query`     | Public search/filter: `?search=&category=&location=&has_model=&limit=`. `search` is multi-term (AND), ranked (name > category/location > notes/model-filenames); model filenames are searchable; `has_model=1/0` filters items with/without 3D models. Logic lives in the pure `query_items()` helper. |
-| `GET /api/queue`     | Public: uploads awaiting identification (a "⏳ Identifying…" strip). |
-| `GET /api/identify/status` | Public: reports whether in-app AI identification is configured and which model it uses. |
-| `POST /api/identify` | **Admin**: identify an item's photos and return a suggestion without changing inventory. |
+| `GET /api/queue`     | Public: uploads awaiting identification + items with an outstanding `review-*.json` marker (a "⏳ Identifying…" strip). |
+| `GET /api/identify/status` | Public: reports `{available: true, mode: "watcher"}` — identification runs via the watcher/bridge, no server-side API key. |
+| `POST /api/identify` | **Admin**: queue an item for (re-)identification. Writes a `captures/review-*.json` marker (reason `identify requested from dashboard`) for the watcher; dedupes if one is already pending. Never calls an LLM API itself. |
 | `POST /api/capture`  | `{image: dataURL}` → saves PNG, returns `{file}`.           |
 | `POST /api/confirm`  | `{files:[...], quantity, note, location}` → writes one sidecar for the item. |
 | `POST /api/ingest`   | Upsert an item by `id` (an agent's identified items). No review marker. |
@@ -157,13 +159,16 @@ hardcoded.
 `/api/ingest` (admin auth) is the safe way for an agent to write identified items.
 Prefer it over editing `inventory.json` directly, which races with the server.
 
-**In-app AI identification.** Set `ANTHROPIC_API_KEY` to enable the Identify
-button in an admin's item detail modal. `INVENTORY_IDENTIFY_MODEL` selects the
-model (default `claude-opus-5`), and `ANTHROPIC_BASE_URL` overrides the Anthropic
-API base URL. The detail modal sends existing photos for identification, presents
-an editable suggestion, and applies accepted fields through `/api/update`. When
-the API key is unset, the status endpoint reports the feature unavailable and the
-dashboard hides the Identify flow.
+**Identify button (watcher-based).** The ✨ Identify button in an admin's item
+detail modal does NOT call an LLM from the server. `POST /api/identify` drops a
+`captures/review-*.json` marker (reason `identify requested from dashboard`),
+i.e. the same trigger `deploy/find_unprocessed.py` + `deploy/vps-bridge.sh`
+already watch. The watching agent pulls the photos, identifies the part, writes
+the result back via `/api/update` (appending a dated change note), checks
+duplicates via `/api/pending`, and deletes the marker. While the marker exists
+the item shows in the "⏳ Identifying…" queue strip and the button reads
+"Identification queued"; the open detail modal updates in place when the agent
+writes the result. No `ANTHROPIC_API_KEY` or model env vars are needed.
 
 ## Data model (`inventory.json` item)
 

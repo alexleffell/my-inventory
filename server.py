@@ -22,8 +22,6 @@ import hmac
 import secrets
 import glob
 import threading
-import urllib.error
-import urllib.request
 from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -52,9 +50,6 @@ if not os.path.exists(WISHLIST):
 #   INVENTORY_HOST=127.0.0.1 INVENTORY_PORT=8770 python3 server.py
 HOST = os.environ.get("INVENTORY_HOST", "0.0.0.0")
 PORT = int(os.environ.get("INVENTORY_PORT", "8770"))
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-IDENTIFY_MODEL = os.environ.get("INVENTORY_IDENTIFY_MODEL", "claude-opus-5")
-ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 USERS = os.path.join(DATA, "users.json")
 
 # Serialize all writes (this server is threaded) so concurrent POSTs can't
@@ -147,20 +142,6 @@ def save_wishlist(w):
     _atomic_write(WISHLIST, json.dumps(w, indent=2))
 
 
-IDENTIFY_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "name": {"type": "string"},
-        "category": {"type": "string"},
-        "quantity": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
-        "condition": {"type": "string"},
-        "notes": {"type": "string"},
-        "confidence": {"enum": ["high", "medium", "low"]},
-    },
-    "required": ["name", "category", "quantity", "condition", "notes", "confidence"],
-    "additionalProperties": False,
-}
-
 IMAGE_TYPES = {
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -169,93 +150,17 @@ IMAGE_TYPES = {
 }
 
 
-def _safe_identify_error(message):
-    message = str(message)
-    if ANTHROPIC_API_KEY:
-        message = message.replace(ANTHROPIC_API_KEY, "[redacted]")
-    return message
-
-
-def identify_item(item, image_paths):
-    """Ask Claude to identify an item from its photos without changing inventory."""
-    content = []
-    for image_path in image_paths:
-        ext = os.path.splitext(image_path)[1].lower()
-        media_type = IMAGE_TYPES.get(ext)
-        if not media_type:
-            continue
-        with open(image_path, "rb") as f:
-            encoded = base64.b64encode(f.read()).decode("ascii")
-        content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": media_type,
-                "data": encoded,
-            },
-        })
-
-    context = []
-    for label, field in (("name", "name"), ("category", "category"),
-                         ("notes", "notes"), ("quantity", "quantity"),
-                         ("location", "location")):
-        value = item.get(field)
-        if value is not None and str(value).strip():
-            context.append("Current %s: %s" % (label, value))
-    context_text = "\n".join(context) if context else "No current item details are available."
-    prompt = (
-        "Identify the physical electronics or hardware part shown in these photos. "
-        "Return a concise part name, category, condition, useful notes, and confidence "
-        "using the provided JSON schema. Notes should include visible specifications, "
-        "SKU values from labels, and ratings. Flag every uncertain value with the word "
-        "unconfirmed. Set quantity only when a printed pack count is readable on a "
-        "label. Otherwise set quantity to null. Never guess quantity. Do not suggest "
-        "or return a storage location. Use these current item details only as context:\n"
-        + context_text
-    )
-    content.append({"type": "text", "text": prompt})
-    body = {
-        "model": IDENTIFY_MODEL,
-        "max_tokens": 8000,
-        "messages": [{"role": "user", "content": content}],
-        "output_config": {"format": {"type": "json_schema", "schema": IDENTIFY_SCHEMA}},
-    }
-    req = urllib.request.Request(
-        ANTHROPIC_BASE_URL.rstrip("/") + "/v1/messages",
-        data=json.dumps(body).encode("utf-8"),
-        method="POST",
-        headers={
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=180) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
+def pending_review_ids():
+    """Item ids that already have a review-*.json marker waiting for the watcher."""
+    ids = set()
+    for f in glob.glob(os.path.join(CAPTURES, "review-*.json")):
         try:
-            error_body = json.loads(exc.read().decode("utf-8"))
-            detail = error_body.get("error", error_body)
-            message = detail.get("message") if isinstance(detail, dict) else detail
-        except (ValueError, UnicodeDecodeError):
-            message = None
-        raise RuntimeError(_safe_identify_error(message or "API returned HTTP %s" % exc.code))
-    except urllib.error.URLError as exc:
-        raise RuntimeError(_safe_identify_error("API request failed: %s" % exc.reason))
-    except (ValueError, UnicodeDecodeError) as exc:
-        raise RuntimeError(_safe_identify_error("invalid API response: %s" % exc))
-
-    if result.get("stop_reason") == "refusal":
-        raise RuntimeError("identification was refused")
-    text = next((block.get("text") for block in result.get("content", [])
-                 if block.get("type") == "text"), None)
-    if text is None:
-        raise RuntimeError("API response did not contain a text result")
-    try:
-        return json.loads(text)
-    except (TypeError, ValueError) as exc:
-        raise RuntimeError(_safe_identify_error("invalid identification result: %s" % exc))
+            item_id = json.load(open(f)).get("id")
+        except Exception:
+            continue
+        if item_id:
+            ids.add(item_id)
+    return ids
 
 
 # 3D model files an item can carry (models/ dir, item field "models": [...]).
@@ -449,8 +354,9 @@ class Handler(BaseHTTPRequestHandler):
             with open(INVENTORY) as f:
                 return self._send(200, f.read(), "application/json")
         if path == "/api/identify/status":
-            return self._send(200, {"available": bool(ANTHROPIC_API_KEY),
-                                    "model": IDENTIFY_MODEL})
+            # Identification runs through the photo watcher/bridge (an agent
+            # polling for review-*.json markers), not an API key on this server.
+            return self._send(200, {"available": True, "mode": "watcher"})
         if path == "/api/pending":
             with open(PENDING) as f:
                 return self._send(200, f.read(), "application/json")
@@ -511,10 +417,13 @@ class Handler(BaseHTTPRequestHandler):
                 if files and not any(x in logged for x in files):
                     q.append({"images": files, "quantity": d.get("quantity"),
                               "location": d.get("location"), "status": "queued"})
-            # items created but not yet named (dashboard adds being identified)
+            # items created but not yet named (dashboard adds being identified),
+            # plus items with an outstanding review marker (enrich / re-identify)
+            reviewing = pending_review_ids()
             for it in inv.get("items", []):
-                if not (it.get("name") or "").strip():
-                    q.append({"id": it.get("id"), "images": it.get("images") or [],
+                if not (it.get("name") or "").strip() or it.get("id") in reviewing:
+                    q.append({"id": it.get("id"), "name": it.get("name") or "",
+                              "images": it.get("images") or [],
                               "quantity": it.get("quantity"), "location": it.get("location"),
                               "status": "identifying"})
             return self._send(200, {"count": len(q), "queue": q})
@@ -617,32 +526,28 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/identify":
-            if not ANTHROPIC_API_KEY:
-                return self._send(503, {"error": "identification not configured"})
+            # Queue the item for the photo watcher/bridge: drop a review-*.json
+            # marker (the same trigger as the enrich flow). The watching agent
+            # pulls the photos, identifies the part, and writes back via
+            # /api/update, then deletes the marker.
             item_id = payload.get("id")
             item = next((it for it in load_inv().get("items", [])
                          if it.get("id") == item_id), None)
             if not item:
                 return self._send(404, {"error": "item not found"})
-            image_paths = []
-            for image in (item.get("images") or [])[:4]:
+            images = []
+            for image in item.get("images") or []:
                 name = os.path.basename(str(image))
-                image_path = os.path.join(CAPTURES, name)
                 if os.path.splitext(name)[1].lower() not in IMAGE_TYPES:
                     continue
-                try:
-                    if os.path.isfile(image_path) and os.path.getsize(image_path) <= int(4.5 * 1024 * 1024):
-                        image_paths.append(image_path)
-                except OSError:
-                    continue
-            if not image_paths:
+                if os.path.isfile(os.path.join(CAPTURES, name)):
+                    images.append(name)
+            if not images:
                 return self._send(400, {"error": "no usable images"})
-            try:
-                suggestion = identify_item(item, image_paths)
-            except Exception as exc:
-                message = _safe_identify_error(exc)[:240]
-                return self._send(502, {"error": "identification failed: " + message})
-            return self._send(200, {"suggestion": suggestion, "model": IDENTIFY_MODEL})
+            if item_id in pending_review_ids():
+                return self._send(200, {"ok": True, "queued": True, "already": True})
+            write_review(item_id, images, "identify requested from dashboard")
+            return self._send(200, {"ok": True, "queued": True})
 
         if path == "/api/users":
             # Admin-only user management (create / set role / delete).

@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""End-to-end test for in-app AI item identification.
+"""End-to-end test for watcher-based item identification.
+
+/api/identify no longer calls an LLM API from the server. It queues the item
+for the photo watcher/bridge by dropping a captures/review-*.json marker (the
+same trigger deploy/find_unprocessed.py already watches). This test verifies
+the marker lifecycle: queue, dedupe, queue visibility, and error cases.
 
 Runs a throwaway copy of server.py because it stores data relative to its own
 location. The repository data and captures directories are never used.
 """
 import base64
-import http.server
+import glob
 import json
 import os
 import shutil
@@ -13,21 +18,11 @@ import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import urllib.error
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEST_KEY = "test-key"
-SUGGESTION = {
-    "name": "Test Buzzer",
-    "category": "Audio",
-    "quantity": None,
-    "condition": "New",
-    "notes": "stub",
-    "confidence": "high",
-}
 
 
 def _free_port():
@@ -49,28 +44,6 @@ def _request(url, body=None, method="GET"):
         return exc.code, json.loads(exc.read().decode())
 
 
-def _start_inventory(tmp, port, api_url, with_key):
-    env = dict(os.environ)
-    env.update(INVENTORY_HOST="127.0.0.1", INVENTORY_PORT=str(port),
-               ANTHROPIC_BASE_URL=api_url, INVENTORY_IDENTIFY_MODEL="claude-opus-5")
-    if with_key:
-        env["ANTHROPIC_API_KEY"] = TEST_KEY
-    else:
-        env.pop("ANTHROPIC_API_KEY", None)
-    proc = subprocess.Popen([sys.executable, "server.py"], cwd=tmp, env=env,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    base = "http://127.0.0.1:%d" % port
-    for _ in range(50):
-        try:
-            if _request(base + "/api/identify/status")[0] == 200:
-                return proc, base
-        except Exception:
-            pass
-        time.sleep(0.1)
-    proc.terminate()
-    raise RuntimeError("inventory server did not start")
-
-
 def _stop(proc):
     if not proc:
         return
@@ -82,43 +55,9 @@ def _stop(proc):
         proc.wait(timeout=5)
 
 
-class AnthropicStub(http.server.BaseHTTPRequestHandler):
-    error = None
-
-    def do_POST(self):
-        try:
-            assert self.path == "/v1/messages", self.path
-            assert self.headers.get("x-api-key") == TEST_KEY
-            length = int(self.headers.get("Content-Length", 0))
-            body = json.loads(self.rfile.read(length))
-            assert body["model"] == "claude-opus-5"
-            assert body["max_tokens"] == 8000
-            assert "output_config" in body and "output_format" not in body
-            assert body["messages"][0]["content"][0]["type"] == "image"
-            response = {
-                "content": [{"type": "text", "text": json.dumps(SUGGESTION)}],
-                "stop_reason": "end_turn",
-            }
-            encoded = json.dumps(response).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(encoded)))
-            self.end_headers()
-            self.wfile.write(encoded)
-        except Exception as exc:
-            AnthropicStub.error = exc
-            self.send_error(500)
-
-    def log_message(self, *args):
-        pass
-
-
 def main():
     tmp = tempfile.mkdtemp(prefix="inv-identify-test-")
     proc = None
-    stub = http.server.ThreadingHTTPServer(("127.0.0.1", 0), AnthropicStub)
-    stub_thread = threading.Thread(target=stub.serve_forever, daemon=True)
-    stub_thread.start()
     try:
         shutil.copy(os.path.join(ROOT, "server.py"), os.path.join(tmp, "server.py"))
         os.makedirs(os.path.join(tmp, "captures"))
@@ -130,37 +69,74 @@ def main():
             f.write(png)
         inventory_path = os.path.join(tmp, "data", "inventory.json")
         with open(inventory_path, "w") as f:
-            json.dump({"items": [{"id": "cap-1", "name": "", "images": ["cap-1.png"]}]}, f)
+            json.dump({"items": [
+                {"id": "cap-1", "name": "Old Name", "images": ["cap-1.png"]},
+                {"id": "item-2", "name": "No Photos", "images": []},
+            ]}, f)
         with open(inventory_path, "rb") as f:
             inventory_before = f.read()
 
-        api_url = "http://127.0.0.1:%d" % stub.server_address[1]
-        proc, base = _start_inventory(tmp, _free_port(), api_url, True)
+        port = _free_port()
+        env = dict(os.environ)
+        env.update(INVENTORY_HOST="127.0.0.1", INVENTORY_PORT=str(port))
+        env.pop("ANTHROPIC_API_KEY", None)  # must not be needed anymore
+        proc = subprocess.Popen([sys.executable, "server.py"], cwd=tmp, env=env,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        base = "http://127.0.0.1:%d" % port
+        for _ in range(50):
+            try:
+                if _request(base + "/api/identify/status")[0] == 200:
+                    break
+            except Exception:
+                pass
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("inventory server did not start")
+
         code, status = _request(base + "/api/identify/status")
         assert code == 200 and status["available"] is True, status
+        assert status.get("mode") == "watcher", status
+
+        # queue an identify request -> exactly one review marker appears
         code, result = _request(base + "/api/identify", {"id": "cap-1"}, "POST")
-        assert code == 200, result
-        assert result["suggestion"]["name"] == "Test Buzzer", result
-        assert result["suggestion"]["quantity"] is None, result
-        assert AnthropicStub.error is None, AnthropicStub.error
+        assert code == 200 and result.get("queued") is True, result
+        markers = glob.glob(os.path.join(tmp, "captures", "review-*.json"))
+        assert len(markers) == 1, markers
+        marker = json.load(open(markers[0]))
+        assert marker["id"] == "cap-1", marker
+        assert marker["images"] == ["cap-1.png"], marker
+        assert "identify" in marker.get("reason", ""), marker
+
+        # the queue endpoint lists the item as identifying
+        code, queue = _request(base + "/api/queue")
+        assert code == 200, queue
+        entry = next((q for q in queue["queue"] if q.get("id") == "cap-1"), None)
+        assert entry and entry["status"] == "identifying", queue
+        assert entry.get("name") == "Old Name", entry
+
+        # a second request dedupes instead of dropping a second marker
+        code, result = _request(base + "/api/identify", {"id": "cap-1"}, "POST")
+        assert code == 200 and result.get("already") is True, result
+        assert len(glob.glob(os.path.join(tmp, "captures", "review-*.json"))) == 1
+
+        # error cases: unknown item, item without photos
+        code, result = _request(base + "/api/identify", {"id": "missing"}, "POST")
+        assert code == 404, (code, result)
+        code, result = _request(base + "/api/identify", {"id": "item-2"}, "POST")
+        assert code == 400, (code, result)
+
+        # queueing never mutates the inventory itself
         with open(inventory_path, "rb") as f:
             assert f.read() == inventory_before, "identify changed inventory.json"
-        code, _ = _request(base + "/api/identify", {"id": "missing"}, "POST")
-        assert code != 200, "unknown item unexpectedly succeeded"
-        _stop(proc)
-        proc = None
 
-        proc, base = _start_inventory(tmp, _free_port(), api_url, False)
-        code, status = _request(base + "/api/identify/status")
-        assert code == 200 and status["available"] is False, status
-        code, result = _request(base + "/api/identify", {"id": "cap-1"}, "POST")
-        assert code == 503, (code, result)
-        print("PASS: configured and unavailable identification flows OK")
+        # watcher finishes: marker deleted -> item leaves the queue
+        os.remove(markers[0])
+        code, queue = _request(base + "/api/queue")
+        assert code == 200, queue
+        assert not any(q.get("id") == "cap-1" for q in queue["queue"]), queue
+        print("PASS: watcher-queue identification flow OK")
     finally:
         _stop(proc)
-        stub.shutdown()
-        stub.server_close()
-        stub_thread.join(timeout=5)
         shutil.rmtree(tmp, ignore_errors=True)
 
 

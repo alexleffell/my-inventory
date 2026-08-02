@@ -434,16 +434,6 @@
   .d-qty { font: 600 20px/1.2 var(--mono); }
   .d-notes { color: var(--dim2); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: break-word; }
   .d-id { font-family: var(--mono); font-size: 11.5px; color: var(--faint); word-break: break-all; }
-  .ai-panel { border: 1px solid var(--orangeline); border-radius: var(--r-card); background: var(--orangebg); padding: 14px; }
-  .ai-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-  .ai-head b { flex: 1; }
-  .ai-confidence { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--orangefg); }
-  .ai-fields { display: grid; gap: 10px; }
-  .ai-field label { display: block; font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin-bottom: 4px; }
-  .ai-field input, .ai-field textarea { width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 8px 10px; }
-  .ai-field textarea { min-height: 76px; resize: vertical; }
-  .ai-current { display: block; margin-top: 3px; color: var(--faint); font-size: 11px; overflow-wrap: break-word; }
-  .ai-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
   @media (max-width: 680px) {
     .d-wrap { grid-template-columns: 1fr; }
     .d-media { border-right: none; border-bottom: 1px solid var(--line); }
@@ -744,9 +734,9 @@ let isAdmin = false;        // editing unlocked?
 let authConfigured = false; // does an admin account exist on this server?
 let authMode = 'login';     // 'login' or 'setup' (first-run admin creation)
 let lastPendingData = [];   // last pending list (for re-render on login)
-let identifyStatus = { available: false, model: '' };
-let identifySuggestion = null;
-let identifying = false;
+let identifyStatus = { available: false };
+let identifying = false;    // an /api/identify request is in flight
+let QUEUE = [];             // /api/queue snapshot (uploads + items being identified)
 const $ = id => document.getElementById(id);
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -1137,7 +1127,7 @@ $('scrim').addEventListener('click', closeDrawer);
 function openDetail(id) {
   const it = ITEMS.find(x => x.id === id); if (!it) return;
   detailId = id; dIdx = 0;
-  identifySuggestion = null; identifying = false;
+  identifying = false;
   renderDetail();
   showOverlay('detail-overlay');
   $('d-x').focus();
@@ -1149,8 +1139,6 @@ function renderDetail() {
   $('d-title').textContent = it.name || '⏳ Identifying…';
   const models = it.models || [];
   const flagged = /unconfirmed/i.test([it.name, it.notes].join(' '));
-  const current = value => esc(value == null || value === '' ? 'not set' : value);
-  const ai = identifySuggestion;
   $('d-wrap').innerHTML = `
     <div class="d-media">
       ${imgs.length
@@ -1175,28 +1163,16 @@ function renderDetail() {
       ${models.length ? `<div class="d-field"><label>3D models</label><div class="models-list">${models.map((f, i) => `
         <div class="m-row"><span class="m-ico ico" aria-hidden="true">🧊</span><span class="m-name">${esc(shortModelName(f))}</span><span class="m-ext">${esc(MODEL_EXT(f))}</span>
           <button type="button" class="btn" data-dmview="${i}">View</button></div>`).join('')}</div></div>` : ''}
-      ${ai ? `<section class="ai-panel" aria-label="AI identification suggestion">
-        <div class="ai-head"><span aria-hidden="true">✨</span><b>Identification suggestion</b><span class="ai-confidence">${esc(ai.suggestion.confidence)} confidence</span></div>
-        <div class="ai-fields">
-          <div class="ai-field"><label for="ai-name">Name</label><input id="ai-name" value="${esc(ai.suggestion.name)}"><small class="ai-current">Current: ${current(it.name)}</small></div>
-          <div class="ai-field"><label for="ai-category">Category</label><input id="ai-category" value="${esc(ai.suggestion.category)}"><small class="ai-current">Current: ${current(it.category)}</small></div>
-          <div class="ai-field"><label for="ai-quantity">Quantity</label><input id="ai-quantity" type="number" min="0" step="1" value="${ai.suggestion.quantity == null ? '' : esc(ai.suggestion.quantity)}" placeholder="Do not change"><small class="ai-current">Current: ${current(it.quantity)}</small></div>
-          <div class="ai-field"><label for="ai-condition">Condition</label><input id="ai-condition" value="${esc(ai.suggestion.condition)}"><small class="ai-current">Current: ${current(it.condition)}</small></div>
-          <div class="ai-field"><label for="ai-notes">Notes</label><textarea id="ai-notes">${esc(ai.suggestion.notes)}</textarea><small class="ai-current">Current: ${current(it.notes)}</small></div>
-        </div>
-        <div class="ai-actions"><button type="button" class="btn" data-ai-dismiss>Dismiss</button><button type="button" class="btn primary" data-ai-apply>Apply</button></div>
-      </section>` : ''}
       <div class="d-field"><label>ID</label><div class="d-id">${esc(it.id)}</div></div>
     </div>`;
   const identifyButton = $('d-identify');
+  const queued = QUEUE.some(q => q.id === detailId);
   identifyButton.hidden = !(isAdmin && imgs.length && identifyStatus.available);
-  identifyButton.disabled = identifying;
-  identifyButton.textContent = identifying ? 'Identifying…' : '✨ Identify';
+  identifyButton.disabled = identifying || queued;
+  identifyButton.textContent = queued ? '⏳ Identification queued' : identifying ? 'Queueing…' : '✨ Identify';
 }
-function closeDetail() { detailId = null; identifySuggestion = null; identifying = false; hideOverlay('detail-overlay'); }
+function closeDetail() { detailId = null; identifying = false; hideOverlay('detail-overlay'); }
 $('d-wrap').addEventListener('click', e => {
-  if (e.target.closest('[data-ai-dismiss]')) { identifySuggestion = null; renderDetail(); return; }
-  if (e.target.closest('[data-ai-apply]')) { applyIdentification(); return; }
   const dq = e.target.closest('[data-dq]');
   if (dq) {
     const it = ITEMS.find(x => x.id === detailId); if (!it) return;
@@ -1227,47 +1203,24 @@ async function loadIdentifyStatus() {
     const r = await fetch('/api/identify/status');
     identifyStatus = await r.json();
     if (detailId) renderDetail();
-  } catch (e) { identifyStatus = { available: false, model: '' }; }
+  } catch (e) { identifyStatus = { available: false }; }
 }
 async function identifyDetailItem() {
   if (!detailId || identifying) return;
   identifying = true; renderDetail();
   try {
     const res = await api('/api/identify', { id: detailId });
-    if (!res.suggestion) throw new Error(res.error || 'Identification failed');
-    identifySuggestion = { suggestion: res.suggestion, model: res.model || identifyStatus.model };
+    if (!res.ok) throw new Error(res.error || 'Identification failed');
+    // Optimistically mark it queued; the /api/queue poll keeps it in sync and
+    // the item updates in place once the watcher agent writes the result.
+    if (!QUEUE.some(q => q.id === detailId)) QUEUE.push({ id: detailId });
+    toast(res.already ? 'Already queued for identification' : 'Queued — the watcher will identify it');
   } catch (e) {
     toast(e.message || 'Identification failed', true);
   } finally {
     identifying = false;
     if (detailId) renderDetail();
   }
-}
-async function applyIdentification() {
-  if (!detailId || !identifySuggestion) return;
-  const quantityText = $('ai-quantity').value.trim();
-  const quantity = Number(quantityText);
-  if (quantityText && (!Number.isInteger(quantity) || quantity < 0)) {
-    toast('Quantity must be a non-negative whole number', true); return;
-  }
-  const date = new Date().toISOString().slice(0, 10);
-  const update = {
-    id: detailId,
-    name: $('ai-name').value.trim(),
-    category: $('ai-category').value.trim(),
-    condition: $('ai-condition').value.trim(),
-    notes: $('ai-notes').value.trimEnd() + `\n[${date}] AI-identified via ${identifySuggestion.model}`,
-  };
-  if (quantityText) update.quantity = quantity;
-  try {
-    const res = await api('/api/update', update);
-    if (!res.ok) throw new Error(res.error || 'Apply failed');
-    const inventory = await (await fetch('/api/inventory')).json();
-    ITEMS = inventory.items || [];
-    identifySuggestion = null;
-    refreshMeta(); renderDetail();
-    toast('Identification applied');
-  } catch (e) { toast(e.message || 'Apply failed', true); }
 }
 
 // ---- quick qty + edit via grid clicks ----
@@ -1761,16 +1714,22 @@ document.addEventListener('keydown', e => {
 
 ['q','loc','sort'].forEach(id => $(id).addEventListener('input', render));
 
-// ---- identification queue (uploads awaiting a name) ----
+// ---- identification queue (uploads + items awaiting the watcher agent) ----
+let lastQueueJSON = '';
 function renderQueue(queue) {
+  QUEUE = queue || [];
+  const json = JSON.stringify(QUEUE);
+  if (json === lastQueueJSON) return;
+  lastQueueJSON = json;
   const box = $('queue-strip');
-  if (!queue || !queue.length) { box.innerHTML = ''; return; }
-  box.innerHTML = `<span class="qhead"><span class="spin"></span> Identifying ${queue.length} upload${queue.length === 1 ? '' : 's'}…</span>` +
-    queue.map(q => {
+  box.innerHTML = !QUEUE.length ? '' :
+    `<span class="qhead"><span class="spin"></span> Identifying ${QUEUE.length} upload${QUEUE.length === 1 ? '' : 's'}…</span>` +
+    QUEUE.map(q => {
       const img = (q.images || [])[0];
       const loc = q.location ? esc(q.location) + ' · ' : '';
-      return `<span class="qitem">${img ? `<img src="/captures/${esc(img)}">` : ''}<span class="qstat">${loc}${esc(q.status)}</span></span>`;
+      return `<span class="qitem">${img ? `<img src="/captures/${esc(img)}">` : ''}<span class="qstat">${q.name ? esc(q.name) + ' · re-identifying' : loc + esc(q.status)}</span></span>`;
     }).join('');
+  if (detailId) renderDetail();  // keep the Identify button state in sync
 }
 
 // ---- wishlist / "to buy" ----
@@ -1874,6 +1833,7 @@ async function poll() {
     const next = (await r.json()).items || [];
     if (!editingId && JSON.stringify(next) !== JSON.stringify(ITEMS)) {
       ITEMS = next; refreshMeta(); render();
+      if (detailId) renderDetail();  // open detail modal updates in place (e.g. watcher result)
     } else if (editingId) {
       ITEMS = next; // keep data fresh; redraw deferred until modal closes
     }
