@@ -5,24 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Moshe's Inventory — Capture</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>📸</text></svg>" />
-<meta name="theme-color" content="#0a0908" />
+<meta name="theme-color" content="#0d0b09" />
 <style>
   :root {
     color-scheme: dark;
     /* surfaces — carbon black with a faint ember warmth */
-    --bg: #0a0908; --panel: #100e0c; --panel2: #171412; --panel3: #1f1b17;
-    --line: #241f1b; --line2: #362e27; --line3: #4c4034;
+    --bg: #0d0b09; --panel: #14110e; --panel2: #1c1815; --panel3: #262019;
+    --line: #2b241d; --line2: #3e352b; --line3: #574a3b;
     /* text — warm whites to match the ground */
-    --text: #f1ece4; --dim: #a2988a; --dim2: #cdc4b8; --faint: #6e6559;
-    /* orange — the single accent: actions, storage locations, focus, brand */
-    --orange: #ff7d26; --orange2: #ff9346; --ember: #e8641b;
-    --orangefg: #ffb067; --orangebg: #ff7d2617; --orangeline: #ff7d264f;
-    --on-orange: #1d0d02;
+    --text: #f2ede5; --dim: #a89e8f; --dim2: #d3cabd; --faint: #776d5f;
+    /* orange — actions, selection, brand */
+    --orange: #f97b16; --orange2: #fb923c; --ember: #ea6a0e;
+    --orangefg: #ffbb77; --orangebg: #f97b1614; --orangeline: #f97b164d;
+    --on-orange: #201004;
+    /* amber — the physical storage layer (bags, bins, locations): calmer than action orange */
+    --amber: #d99e4f; --amberfg: #e8bd7d; --amberbg: #d9973f12; --amberline: #c088364d;
     /* status — semantic only, used sparingly */
-    --okfg: #55c878; --okbg: #23863620; --okline: #2ea04355;
+    --okfg: #4fc471; --okbg: #23863620; --okline: #2ea04352;
     --red: #da3633; --redbg: #f8514922; --redfg: #ff8a82;
     --warnfg: #e8c34e; --warnbg: #e3b34112; --warnline: #e3b34152;
-    --focus: #ffa04d;
+    --focus: #ffab5c;
     /* the "datasheet" voice: every data value renders in mono */
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
     /* elevation + radii */
@@ -33,7 +35,7 @@
   * { box-sizing: border-box; }
   /* the ember strip — machine indicator light across the top of every page */
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 100;
-                 background: linear-gradient(90deg, var(--ember), var(--orange) 45%, #ffc57a); pointer-events: none; }
+                 background: linear-gradient(90deg, var(--ember), var(--orange) 45%, #ffc078); pointer-events: none; }
   html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
   body {
     margin: 0; font: 15px/1.5 -apple-system, system-ui, sans-serif;
@@ -44,7 +46,7 @@
   button { font: inherit; cursor: pointer; color: inherit; }
   input, select, textarea { font: inherit; }
   ::placeholder { color: var(--faint); }
-  ::selection { background: #8a4310; color: #fff; }
+  ::selection { background: #7c3a12; color: #fff; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -117,7 +119,7 @@
   .shot img { width: 92px; height: 92px; object-fit: cover; border-radius: var(--r-ctl); border: 1px solid var(--line2); display: block; }
   .shot .x { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%;
              background: var(--red); color: #fff; border: none; font-size: 12px; line-height: 1; padding: 0; }
-  .shot .num { position: absolute; bottom: 4px; left: 4px; background: #0a0908cc; border-radius: 5px; padding: 0 5px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .shot .num { position: absolute; bottom: 4px; left: 4px; background: #0d0b09cc; border-radius: 5px; padding: 0 5px; font-size: 11px; font-variant-numeric: tabular-nums; }
   .nostrip { color: var(--faint); font-size: 13px; padding: 14px 0; }
   .fields { display: flex; flex-direction: column; gap: 9px; }
   .qtyrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -136,7 +138,7 @@
   .item .badge { position: absolute; right: -4px; bottom: -4px; background: var(--orange); color: var(--on-orange); font-weight: 700; border-radius: 6px; font-size: 10px; padding: 0 4px; font-variant-numeric: tabular-nums; }
   .item .n { font-weight: 600; font-size: 14px; }
   .item .c { font-size: 12px; color: var(--dim); }
-  .item .q { margin-left: auto; background: var(--orangebg); color: var(--orangefg); border: 1px solid var(--orangeline); font-family: var(--mono); font-weight: 600; border-radius: 7px; padding: 2px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .item .q { margin-left: auto; background: var(--amberbg); color: var(--amberfg); border: 1px solid var(--amberline); font-family: var(--mono); font-weight: 600; border-radius: 7px; padding: 2px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
   .totals { display: flex; gap: 18px; margin-bottom: 10px; }
   .totals b { font-size: 19px; display: block; font-variant-numeric: tabular-nums; }
   .totals span { color: var(--dim); font-size: 11px; text-transform: uppercase; }

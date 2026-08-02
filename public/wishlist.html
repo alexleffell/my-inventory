@@ -5,25 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>To buy · Moshe's Inventory</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛒</text></svg>" />
-<meta name="theme-color" content="#0a0908" />
+<meta name="theme-color" content="#0d0b09" />
 <meta name="description" content="Purchase requests — parts to buy for Moshe's electronics inventory." />
 <style>
   :root {
     color-scheme: dark;
     /* surfaces — carbon black with a faint ember warmth */
-    --bg: #0a0908; --panel: #100e0c; --panel2: #171412; --panel3: #1f1b17;
-    --line: #241f1b; --line2: #362e27; --line3: #4c4034;
+    --bg: #0d0b09; --panel: #14110e; --panel2: #1c1815; --panel3: #262019;
+    --line: #2b241d; --line2: #3e352b; --line3: #574a3b;
     /* text — warm whites to match the ground */
-    --text: #f1ece4; --dim: #a2988a; --dim2: #cdc4b8; --faint: #6e6559;
-    /* orange — the single accent: actions, storage locations, focus, brand */
-    --orange: #ff7d26; --orange2: #ff9346; --ember: #e8641b;
-    --orangefg: #ffb067; --orangebg: #ff7d2617; --orangeline: #ff7d264f;
-    --on-orange: #1d0d02;
+    --text: #f2ede5; --dim: #a89e8f; --dim2: #d3cabd; --faint: #776d5f;
+    /* orange — actions, selection, brand */
+    --orange: #f97b16; --orange2: #fb923c; --ember: #ea6a0e;
+    --orangefg: #ffbb77; --orangebg: #f97b1614; --orangeline: #f97b164d;
+    --on-orange: #201004;
+    /* amber — the physical storage layer (bags, bins, locations): calmer than action orange */
+    --amber: #d99e4f; --amberfg: #e8bd7d; --amberbg: #d9973f12; --amberline: #c088364d;
     /* status — semantic only, used sparingly */
-    --okfg: #55c878; --okbg: #23863620; --okline: #2ea04355;
+    --okfg: #4fc471; --okbg: #23863620; --okline: #2ea04352;
     --red: #da3633; --redbg: #f8514922; --redfg: #ff8a82;
     --warnfg: #e8c34e; --warnbg: #e3b34112; --warnline: #e3b34152;
-    --focus: #ffa04d;
+    --focus: #ffab5c;
     /* the "datasheet" voice: every data value renders in mono */
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
     /* elevation + radii */
@@ -34,13 +36,13 @@
   * { box-sizing: border-box; }
   /* the ember strip — machine indicator light across the top of every page */
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 100;
-                 background: linear-gradient(90deg, var(--ember), var(--orange) 45%, #ffc57a); pointer-events: none; }
+                 background: linear-gradient(90deg, var(--ember), var(--orange) 45%, #ffc078); pointer-events: none; }
   body { margin: 0; font: 15px/1.5 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text);
          -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
   button { font: inherit; cursor: pointer; color: inherit; }
   input, select, textarea { font: inherit; }
   ::placeholder { color: var(--faint); }
-  ::selection { background: #8a4310; color: #fff; }
+  ::selection { background: #7c3a12; color: #fff; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -50,7 +52,7 @@
   header {
     padding: 14px 26px; border-bottom: 1px solid var(--line);
     display: flex; align-items: center; gap: 12px;
-    position: sticky; top: 0; background: #0a0908ee; backdrop-filter: blur(10px); z-index: 20;
+    position: sticky; top: 0; background: #0d0b09ee; backdrop-filter: blur(10px); z-index: 20;
   }
   h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 650;
        background: linear-gradient(90deg, var(--text), var(--orangefg)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }

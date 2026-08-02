@@ -29,12 +29,13 @@ modal is open) — deploys show up in open tabs without a manual refresh.
 
 The design system (shared across all three pages): black/orange palette as
 semantic CSS custom properties in `:root` (surfaces `--bg/--panel*/--line*`,
-text `--text/--dim/--dim2/--faint`, the single accent family
+text `--text/--dim/--dim2/--faint`, accent families
 `--orange/--orange2/--ember/--orangefg/--orangebg/--orangeline` +
-`--on-orange` for text on orange fills, status `--okfg/--warnfg/--redfg` +
-`*bg`/`*line` tints, `--focus`, radii `--r-ctl/--r-card/--r-modal`, shadows
-`--shadow-1/2`). Orange owns actions/locations/brand; green/red/yellow are
-status-only. Every page carries the 2px `body::before` ember strip. New UI
+`--on-orange` for text on orange fills and `--amber/--amberfg/--amberbg/
+--amberline`, status `--okfg/--warnfg/--redfg` + `*bg`/`*line` tints,
+`--focus`, radii `--r-ctl/--r-card/--r-modal`, shadows `--shadow-1/2`).
+Orange owns actions/selection/brand; amber owns the physical storage layer
+(location chips, storage map); green/red/yellow are status-only. Every page carries the 2px `body::before` ember strip. New UI
 must use these tokens, not ad-hoc hex. The dashboard has a left sidebar
 (brand, stats, page nav, category filter via `activeCat`/`renderSideCats()`,
 admin actions) that collapses to a drawer under 920px, and an item detail
