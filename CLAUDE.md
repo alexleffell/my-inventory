@@ -27,13 +27,20 @@ server answers `HEAD` for the page routes. The dashboard polls `HEAD` on itself
 every 10s and self-reloads when `Last-Modified` changes (skipped while an edit
 modal is open) — deploys show up in open tabs without a manual refresh.
 
-The dashboard's design system: semantic CSS custom properties in `:root` of
-`dashboard.html` (surfaces `--bg/--panel*/--line*`, text `--text/--dim/--dim2`,
-status `--okfg/--warnfg/--redfg` + `*bg`/`*line` tints, `--focus`, radii
-`--r-ctl/--r-card/--r-modal`, shadows `--shadow-1/2`). New UI must use these
-tokens, not ad-hoc hex. Dialogs use `role="dialog"` + background `inert` via
-`showOverlay()/hideOverlay()` (focus restore included) — route any new overlay
-through those helpers.
+The design system (shared across all three pages): black/orange palette as
+semantic CSS custom properties in `:root` (surfaces `--bg/--panel*/--line*`,
+text `--text/--dim/--dim2/--faint`, the single accent family
+`--orange/--orange2/--ember/--orangefg/--orangebg/--orangeline` +
+`--on-orange` for text on orange fills, status `--okfg/--warnfg/--redfg` +
+`*bg`/`*line` tints, `--focus`, radii `--r-ctl/--r-card/--r-modal`, shadows
+`--shadow-1/2`). Orange owns actions/locations/brand; green/red/yellow are
+status-only. Every page carries the 2px `body::before` ember strip. New UI
+must use these tokens, not ad-hoc hex. The dashboard has a left sidebar
+(brand, stats, page nav, category filter via `activeCat`/`renderSideCats()`,
+admin actions) that collapses to a drawer under 920px, and an item detail
+modal (`openDetail(id)`) opened by clicking a card. Dialogs use
+`role="dialog"` + background `inert` via `showOverlay()/hideOverlay()`
+(stacked focus restore) — route any new overlay through those helpers.
 
 ## Data safety
 
@@ -63,8 +70,9 @@ mcp_server.py        # optional MCP server (stdlib): read/query, request_purchas
                      # attach_item_model / get_item_model / list_item_models (3D models)
 public/
   capture.html       # camera capture (multi-photo per item) + live inventory panel
-  dashboard.html     # editable dashboard (edit modal w/ inline camera, lightbox gallery,
-                     # + a 3D model viewer modal and per-item model attach/view/delete)
+  dashboard.html     # editable dashboard: sidebar (nav/stats/category filter), item detail
+                     # modal, edit modal w/ inline camera, lightbox gallery, 3D model viewer
+                     # modal and per-item model attach/view/delete
   wishlist.html      # the "To buy" page
   vendor/o3dv/       # vendored Online3DViewer (MIT) + occt-import-js WASM for the 3D
                      # viewer. Served at /vendor/ (stdlib static route). CDN-free.
