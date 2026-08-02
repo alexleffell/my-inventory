@@ -434,6 +434,16 @@
   .d-qty { font: 600 20px/1.2 var(--mono); }
   .d-notes { color: var(--dim2); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: break-word; }
   .d-id { font-family: var(--mono); font-size: 11.5px; color: var(--faint); word-break: break-all; }
+  .ai-panel { border: 1px solid var(--orangeline); border-radius: var(--r-card); background: var(--orangebg); padding: 14px; }
+  .ai-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .ai-head b { flex: 1; }
+  .ai-confidence { font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--orangefg); }
+  .ai-fields { display: grid; gap: 10px; }
+  .ai-field label { display: block; font: 600 10px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin-bottom: 4px; }
+  .ai-field input, .ai-field textarea { width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 8px 10px; }
+  .ai-field textarea { min-height: 76px; resize: vertical; }
+  .ai-current { display: block; margin-top: 3px; color: var(--faint); font-size: 11px; overflow-wrap: break-word; }
+  .ai-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
   @media (max-width: 680px) {
     .d-wrap { grid-template-columns: 1fr; }
     .d-media { border-right: none; border-bottom: 1px solid var(--line); }
@@ -585,6 +595,7 @@
       </div>
       <div class="foot">
         <button class="btn" id="d-edit">✎ Edit</button>
+        <button class="btn" id="d-identify" hidden>✨ Identify</button>
         <div class="spacer"></div>
         <button class="btn" id="d-close">Close</button>
       </div>
@@ -733,6 +744,9 @@ let isAdmin = false;        // editing unlocked?
 let authConfigured = false; // does an admin account exist on this server?
 let authMode = 'login';     // 'login' or 'setup' (first-run admin creation)
 let lastPendingData = [];   // last pending list (for re-render on login)
+let identifyStatus = { available: false, model: '' };
+let identifySuggestion = null;
+let identifying = false;
 const $ = id => document.getElementById(id);
 const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -796,6 +810,7 @@ function applyAuthUI() {
   render();
   renderPending(lastPendingData);
   renderWishlist(WISHLIST);
+  if (detailId) renderDetail();
 }
 function openAuth(mode) {
   authMode = mode;
@@ -1122,6 +1137,7 @@ $('scrim').addEventListener('click', closeDrawer);
 function openDetail(id) {
   const it = ITEMS.find(x => x.id === id); if (!it) return;
   detailId = id; dIdx = 0;
+  identifySuggestion = null; identifying = false;
   renderDetail();
   showOverlay('detail-overlay');
   $('d-x').focus();
@@ -1133,6 +1149,8 @@ function renderDetail() {
   $('d-title').textContent = it.name || '⏳ Identifying…';
   const models = it.models || [];
   const flagged = /unconfirmed/i.test([it.name, it.notes].join(' '));
+  const current = value => esc(value == null || value === '' ? 'not set' : value);
+  const ai = identifySuggestion;
   $('d-wrap').innerHTML = `
     <div class="d-media">
       ${imgs.length
@@ -1157,11 +1175,28 @@ function renderDetail() {
       ${models.length ? `<div class="d-field"><label>3D models</label><div class="models-list">${models.map((f, i) => `
         <div class="m-row"><span class="m-ico ico" aria-hidden="true">🧊</span><span class="m-name">${esc(shortModelName(f))}</span><span class="m-ext">${esc(MODEL_EXT(f))}</span>
           <button type="button" class="btn" data-dmview="${i}">View</button></div>`).join('')}</div></div>` : ''}
+      ${ai ? `<section class="ai-panel" aria-label="AI identification suggestion">
+        <div class="ai-head"><span aria-hidden="true">✨</span><b>Identification suggestion</b><span class="ai-confidence">${esc(ai.suggestion.confidence)} confidence</span></div>
+        <div class="ai-fields">
+          <div class="ai-field"><label for="ai-name">Name</label><input id="ai-name" value="${esc(ai.suggestion.name)}"><small class="ai-current">Current: ${current(it.name)}</small></div>
+          <div class="ai-field"><label for="ai-category">Category</label><input id="ai-category" value="${esc(ai.suggestion.category)}"><small class="ai-current">Current: ${current(it.category)}</small></div>
+          <div class="ai-field"><label for="ai-quantity">Quantity</label><input id="ai-quantity" type="number" min="0" step="1" value="${ai.suggestion.quantity == null ? '' : esc(ai.suggestion.quantity)}" placeholder="Do not change"><small class="ai-current">Current: ${current(it.quantity)}</small></div>
+          <div class="ai-field"><label for="ai-condition">Condition</label><input id="ai-condition" value="${esc(ai.suggestion.condition)}"><small class="ai-current">Current: ${current(it.condition)}</small></div>
+          <div class="ai-field"><label for="ai-notes">Notes</label><textarea id="ai-notes">${esc(ai.suggestion.notes)}</textarea><small class="ai-current">Current: ${current(it.notes)}</small></div>
+        </div>
+        <div class="ai-actions"><button type="button" class="btn" data-ai-dismiss>Dismiss</button><button type="button" class="btn primary" data-ai-apply>Apply</button></div>
+      </section>` : ''}
       <div class="d-field"><label>ID</label><div class="d-id">${esc(it.id)}</div></div>
     </div>`;
+  const identifyButton = $('d-identify');
+  identifyButton.hidden = !(isAdmin && imgs.length && identifyStatus.available);
+  identifyButton.disabled = identifying;
+  identifyButton.textContent = identifying ? 'Identifying…' : '✨ Identify';
 }
-function closeDetail() { detailId = null; hideOverlay('detail-overlay'); }
+function closeDetail() { detailId = null; identifySuggestion = null; identifying = false; hideOverlay('detail-overlay'); }
 $('d-wrap').addEventListener('click', e => {
+  if (e.target.closest('[data-ai-dismiss]')) { identifySuggestion = null; renderDetail(); return; }
+  if (e.target.closest('[data-ai-apply]')) { applyIdentification(); return; }
   const dq = e.target.closest('[data-dq]');
   if (dq) {
     const it = ITEMS.find(x => x.id === detailId); if (!it) return;
@@ -1185,6 +1220,55 @@ $('d-x').addEventListener('click', closeDetail);
 $('d-close').addEventListener('click', closeDetail);
 $('detail-overlay').addEventListener('click', e => { if (e.target === $('detail-overlay')) closeDetail(); });
 $('d-edit').addEventListener('click', () => { const id = detailId; closeDetail(); openEdit(id); });
+$('d-identify').addEventListener('click', identifyDetailItem);
+
+async function loadIdentifyStatus() {
+  try {
+    const r = await fetch('/api/identify/status');
+    identifyStatus = await r.json();
+    if (detailId) renderDetail();
+  } catch (e) { identifyStatus = { available: false, model: '' }; }
+}
+async function identifyDetailItem() {
+  if (!detailId || identifying) return;
+  identifying = true; renderDetail();
+  try {
+    const res = await api('/api/identify', { id: detailId });
+    if (!res.suggestion) throw new Error(res.error || 'Identification failed');
+    identifySuggestion = { suggestion: res.suggestion, model: res.model || identifyStatus.model };
+  } catch (e) {
+    toast(e.message || 'Identification failed', true);
+  } finally {
+    identifying = false;
+    if (detailId) renderDetail();
+  }
+}
+async function applyIdentification() {
+  if (!detailId || !identifySuggestion) return;
+  const quantityText = $('ai-quantity').value.trim();
+  const quantity = Number(quantityText);
+  if (quantityText && (!Number.isInteger(quantity) || quantity < 0)) {
+    toast('Quantity must be a non-negative whole number', true); return;
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  const update = {
+    id: detailId,
+    name: $('ai-name').value.trim(),
+    category: $('ai-category').value.trim(),
+    condition: $('ai-condition').value.trim(),
+    notes: $('ai-notes').value.trimEnd() + `\n[${date}] AI-identified via ${identifySuggestion.model}`,
+  };
+  if (quantityText) update.quantity = quantity;
+  try {
+    const res = await api('/api/update', update);
+    if (!res.ok) throw new Error(res.error || 'Apply failed');
+    const inventory = await (await fetch('/api/inventory')).json();
+    ITEMS = inventory.items || [];
+    identifySuggestion = null;
+    refreshMeta(); renderDetail();
+    toast('Identification applied');
+  } catch (e) { toast(e.message || 'Apply failed', true); }
+}
 
 // ---- quick qty + edit via grid clicks ----
 $('grid').addEventListener('click', async e => {
@@ -1800,6 +1884,7 @@ async function poll() {
   setTimeout(poll, 1500);
 }
 checkAuth();   // determine public vs admin (and restore a saved session)
+loadIdentifyStatus();  // cache feature availability once at boot
 poll();
 
 // ---- live reload: pick up deploys without a manual refresh ----

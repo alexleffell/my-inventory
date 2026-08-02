@@ -135,6 +135,8 @@ hardcoded.
 | `GET /api/summary`   | Public overview: totals + category/location breakdown + wishlist counts. |
 | `GET /api/query`     | Public search/filter: `?search=&category=&location=&has_model=&limit=`. `search` is multi-term (AND), ranked (name > category/location > notes/model-filenames); model filenames are searchable; `has_model=1/0` filters items with/without 3D models. Logic lives in the pure `query_items()` helper. |
 | `GET /api/queue`     | Public: uploads awaiting identification (a "⏳ Identifying…" strip). |
+| `GET /api/identify/status` | Public: reports whether in-app AI identification is configured and which model it uses. |
+| `POST /api/identify` | **Admin**: identify an item's photos and return a suggestion without changing inventory. |
 | `POST /api/capture`  | `{image: dataURL}` → saves PNG, returns `{file}`.           |
 | `POST /api/confirm`  | `{files:[...], quantity, note, location}` → writes one sidecar for the item. |
 | `POST /api/ingest`   | Upsert an item by `id` (an agent's identified items). No review marker. |
@@ -154,6 +156,14 @@ hardcoded.
 
 `/api/ingest` (admin auth) is the safe way for an agent to write identified items.
 Prefer it over editing `inventory.json` directly, which races with the server.
+
+**In-app AI identification.** Set `ANTHROPIC_API_KEY` to enable the Identify
+button in an admin's item detail modal. `INVENTORY_IDENTIFY_MODEL` selects the
+model (default `claude-opus-5`), and `ANTHROPIC_BASE_URL` overrides the Anthropic
+API base URL. The detail modal sends existing photos for identification, presents
+an editable suggestion, and applies accepted fields through `/api/update`. When
+the API key is unset, the status endpoint reports the feature unavailable and the
+dashboard hides the Identify flow.
 
 ## Data model (`inventory.json` item)
 
