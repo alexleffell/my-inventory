@@ -330,6 +330,7 @@
   .viewer .v-tab { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line2); background: var(--panel);
           color: var(--dim2); cursor: pointer; white-space: nowrap; }
   .viewer .v-tab.on { background: #1c3654; border-color: #4a90d9; color: #bfe0ff; }
+  .viewer .v-tab .v-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: baseline; }
   .viewer .v-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
   .viewer .v-canvas { flex: 1; position: relative; min-height: 0; }
   .viewer .v-status { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: var(--dim2);
@@ -1162,6 +1163,24 @@ $('del-btn').addEventListener('click', async () => {
 let ovViewer = null, viewerModels = [], viewerIdx = 0;
 const MODEL_EXT = f => (String(f).split('.').pop() || '').toLowerCase();
 const shortModelName = f => String(f).replace(/^model-\d+-/, '');   // drop the server's "model-<ms>-" prefix
+// Distinct body colors for colorless meshes (STL/OBJ). Formats with baked
+// materials (STEP/GLB/3MF) ignore defaultColor and keep their own colors.
+// Hash of the filename -> stable color per model across sessions.
+const MODEL_PALETTE = [
+  [232, 163, 61],   // amber
+  [74, 144, 217],   // accent blue
+  [77, 182, 155],   // teal
+  [226, 109, 92],   // coral
+  [155, 125, 220],  // violet
+  [163, 190, 88],   // lime
+  [214, 110, 171],  // pink
+  [96, 192, 210],   // cyan
+];
+function modelColor(file) {
+  const s = String(file); let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return MODEL_PALETTE[h % MODEL_PALETTE.length];
+}
 
 function openViewer(id, idx) {
   const it = ITEMS.find(x => x.id === id); if (!it) return;
@@ -1175,7 +1194,10 @@ function openViewer(id, idx) {
 }
 function renderViewerTabs() {
   $('viewer-tabs').innerHTML = viewerModels.length > 1
-    ? viewerModels.map((f, i) => `<button class="v-tab ${i === viewerIdx ? 'on' : ''}" data-i="${i}">${esc(shortModelName(f))}</button>`).join('')
+    ? viewerModels.map((f, i) => {
+        const c = modelColor(f);
+        return `<button class="v-tab ${i === viewerIdx ? 'on' : ''}" data-i="${i}"><span class="v-dot" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>${esc(shortModelName(f))}</button>`;
+      }).join('')
     : '';
 }
 function loadViewerModel() {
@@ -1188,17 +1210,25 @@ function loadViewerModel() {
   const host = $('viewer-canvas');
   if (typeof OV === 'undefined') { $('viewer-status').textContent = '3D viewer library failed to load.'; return; }
   $('viewer-status').textContent = 'Loading ' + shortModelName(file) + ' …';
+  const body = modelColor(file);
+  // stl/obj take our palette color; everything else carries baked materials
+  // (STEP parts are often near-black), where light edges keep them legible.
+  const colorless = ['stl', 'obj'].includes(MODEL_EXT(file));
   if (!ovViewer) {
     ovViewer = new OV.EmbeddedViewer(host, {
-      // medium background + light edges so BOTH light meshes (STL) and dark
-      // baked-color models (STEP parts are often near-black) stay legible.
       backgroundColor: new OV.RGBAColor(58, 64, 74, 255),
-      defaultColor: new OV.RGBColor(200, 205, 214),
-      edgeSettings: new OV.EdgeSettings(true, new OV.RGBColor(150, 158, 172), 45),
+      defaultColor: new OV.RGBColor(body[0], body[1], body[2]),
       onModelLoaded: () => { $('viewer-status').textContent = ''; },
       onModelLoadFailed: () => { $('viewer-status').textContent = 'Could not render this file — use ⬇ Download to open it locally.'; },
     });
   }
+  // o3dv re-reads parameters.defaultColor on every import, so switching tabs
+  // recolors without rebuilding the viewer.
+  ovViewer.parameters.defaultColor = new OV.RGBColor(body[0], body[1], body[2]);
+  const edge = colorless
+    ? new OV.RGBColor((body[0] * 0.35) | 0, (body[1] * 0.35) | 0, (body[2] * 0.35) | 0)
+    : new OV.RGBColor(150, 158, 172);
+  ovViewer.GetViewer().SetEdgeSettings(new OV.EdgeSettings(true, edge, 45));
   ovViewer.LoadModelFromUrlList([url]);
 }
 function closeViewer() { $('viewer').classList.remove('show'); }
