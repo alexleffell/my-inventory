@@ -5,34 +5,60 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>To buy · Moshe's Inventory</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛒</text></svg>" />
-<meta name="theme-color" content="#0a0e13" />
+<meta name="theme-color" content="#0c0b09" />
 <meta name="description" content="Purchase requests — parts to buy for Moshe's electronics inventory." />
 <style>
   :root {
     color-scheme: dark;
-    --bg: #0a0e13; --panel: #11161d; --panel2: #161b22; --line: #1f2730;
-    --line2: #2a3340; --text: #e6edf3; --dim: #768390; --dim2: #9aa7b4;
-    --blue: #2f81f7; --bluebg: #1f6feb22; --bluefg: #79c0ff;
-    --green: #238636; --green2: #2ea043; --red: #da3633; --redbg: #f8514922;
+    /* surfaces — warm graphite (brown-dominant, deliberately not blue-black) */
+    --bg: #0c0b09; --panel: #14130e; --panel2: #1b1913; --panel3: #23201a;
+    --line: #262319; --line2: #363127; --line3: #4b4536;
+    /* text — warm whites to match the ground */
+    --text: #ede9e2; --dim: #a09a8e; --dim2: #c6c0b6; --faint: #6e6a60;
+    /* copper: the physical-storage layer (bags, bins, locations) */
+    --copper: #d99a55; --copperfg: #e8b477; --copperbg: #d9873c14; --copperline: #a0653052;
+    /* cool accent: digital things (links, categories, 3D) */
+    --blue: #58a6ff; --bluebg: #1f6feb24; --bluefg: #8ec7ff;
+    /* status */
+    --green: #238636; --green2: #2ea043; --okfg: #4ac26b; --okbg: #2386361f;
+    --red: #da3633; --redbg: #f8514922; --redfg: #ff8078;
+    --warnfg: #e8c34e; --warnbg: #e3b3410f; --warnline: #e3b34152;
+    --focus: #74b7ff;
+    /* the "datasheet" voice: every data value renders in mono */
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    /* elevation + radii */
+    --shadow-1: 0 1px 2px #0006, 0 6px 18px -8px #0009;
+    --shadow-2: 0 2px 8px #0008, 0 20px 48px -16px #000d;
+    --r-ctl: 10px; --r-card: 14px; --r-modal: 16px; --r-tag: 3px;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.45 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  button { font: inherit; cursor: pointer; }
+  body { margin: 0; font: 15px/1.5 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text);
+         -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  button { font: inherit; cursor: pointer; color: inherit; }
   input, select, textarea { font: inherit; }
+  ::placeholder { color: var(--faint); }
+  ::selection { background: #6f4d26; color: #fff; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
   a { color: inherit; }
 
   header {
     padding: 14px 26px; border-bottom: 1px solid var(--line);
     display: flex; align-items: center; gap: 12px;
-    position: sticky; top: 0; background: #0a0e13ee; backdrop-filter: blur(10px); z-index: 20;
+    position: sticky; top: 0; background: #0c0b09ee; backdrop-filter: blur(10px); z-index: 20;
   }
   h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; font-weight: 650;
-       background: linear-gradient(90deg, #e6edf3, #79c0ff); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+       background: linear-gradient(90deg, var(--text), var(--bluefg)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
   .hactions { display: flex; gap: 8px; margin-left: auto; }
-  .btn { border-radius: 9px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 14px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
-  .btn:hover { border-color: #3a4654; }
+  .btn { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 14px;
+         display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none;
+         transition: border-color .15s, background .15s, transform .08s; }
+  .btn:hover { border-color: var(--line3); background: var(--panel3); }
+  .btn:active { transform: scale(.96); }
   .btn.primary { background: var(--green); border-color: var(--green2); font-weight: 600; }
-  .btn.primary:hover { background: #2ea043; }
+  .btn.primary:hover { background: var(--green2); }
   body:not(.admin) #wl-add-btn { display: none; }
 
   main { padding: 22px 26px 80px; max-width: 820px; margin: 0 auto; }
@@ -41,26 +67,26 @@
   /* wishlist / "to buy" */
   .wl-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
   .wl-title { font-size: 15px; font-weight: 650; color: #9db6ff; display: flex; align-items: center; gap: 8px; }
-  .wl-count { font-size: 11px; color: var(--dim); background: #1b2740; border: 1px solid #2a3550; padding: 1px 8px; border-radius: 999px; font-weight: 600; }
+  .wl-count { font-size: 11px; color: var(--dim); background: #1b2740; border: 1px solid #2a3550; padding: 1px 8px; border-radius: 999px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .wl-head .btn { margin-left: auto; padding: 7px 12px; font-size: 13px; }
   .wl-list { display: flex; flex-direction: column; gap: 8px; }
-  .wl-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line2); background: var(--panel2); border-radius: 12px; }
+  .wl-card { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--line2); background: var(--panel2); border-radius: var(--r-card); }
   .wl-card.done { opacity: .55; }
   .wl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
   .wl-part { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .wl-qty { color: var(--dim2); font-weight: 600; }
+  .wl-qty { color: var(--dim2); font-weight: 600; font-variant-numeric: tabular-nums; }
   .wl-meta { font-size: 12px; color: var(--dim2); }
   .wl-meta .proj { color: #9db6ff; font-weight: 600; }
   .wl-reason { font-size: 13px; color: var(--dim); }
   .wl-right { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
   .wl-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; }
-  .wl-badge.st-requested { background: #1f6feb22; color: #79c0ff; }
-  .wl-badge.st-ordered { background: #bb800922; color: #e3b341; }
-  .wl-badge.st-bought { background: #23863622; color: #3fb950; }
-  .wl-right select { border-radius: 8px; border: 1px solid var(--line2); background: var(--panel); color: var(--text); padding: 5px 8px; font-size: 12px; }
-  .wl-right .wl-del { background: none; border: 1px solid transparent; color: var(--dim); width: 28px; height: 28px; border-radius: 8px; font-size: 15px; }
-  .wl-right .wl-del:hover { color: #ff7b72; border-color: #da363366; background: var(--redbg); }
-  .wl-type { font-size: 11px; padding: 2px 9px; border-radius: 999px; background: #2a334066; color: var(--dim2); }
+  .wl-badge.st-requested { background: var(--bluebg); color: var(--bluefg); }
+  .wl-badge.st-ordered { background: var(--warnbg); color: var(--warnfg); }
+  .wl-badge.st-bought { background: var(--okbg); color: var(--okfg); }
+  .wl-right select { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel); color: var(--text); padding: 5px 8px; font-size: 12px; }
+  .wl-right .wl-del { background: none; border: 1px solid transparent; color: var(--dim); width: 28px; height: 28px; border-radius: var(--r-ctl); font-size: 15px; }
+  .wl-right .wl-del:hover { color: var(--redfg); border-color: var(--red); background: var(--redbg); }
+  .wl-type { font-size: 11px; padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--line2) 40%, transparent); color: var(--dim2); }
   .empty { text-align: center; color: var(--dim); padding: 50px 20px; }
   .empty .big { font-size: 40px; margin-bottom: 10px; }
 
@@ -68,14 +94,15 @@
   .overlay { position: fixed; inset: 0; background: #00000099; backdrop-filter: blur(3px); display: none;
              align-items: center; justify-content: center; z-index: 50; padding: 20px; }
   .overlay.show { display: flex; }
-  .modal { background: var(--panel); border: 1px solid var(--line2); border-radius: 16px; width: 100%; max-width: 480px;
-           max-height: 92vh; overflow: auto; }
+  .modal { background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r-modal); width: 100%; max-width: 480px;
+           max-height: 92vh; overflow: auto; box-shadow: var(--shadow-2); }
   .modal h3 { margin: 0; padding: 18px 20px; border-bottom: 1px solid var(--line); font-size: 16px; }
   .modal .form { padding: 18px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .modal .form .full { grid-column: 1 / -1; }
   .field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); margin-bottom: 5px; }
   .field input, .field select, .field textarea {
-    width: 100%; border-radius: 9px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 11px; }
+    width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 11px; }
+  #w-quantity { font-variant-numeric: tabular-nums; }
   .field textarea { resize: vertical; min-height: 64px; }
   .modal .foot { display: flex; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--line); align-items: center; }
   .modal .foot .spacer { flex: 1; }
@@ -84,7 +111,7 @@
   /* toast */
   .toasts { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 80; }
   .toast { background: var(--panel2); border: 1px solid var(--line2); border-left: 3px solid var(--green2);
-           padding: 11px 16px; border-radius: 10px; font-size: 14px; box-shadow: 0 8px 24px #0008; animation: rise .2s ease; }
+           padding: 11px 16px; border-radius: var(--r-ctl); font-size: 14px; box-shadow: var(--shadow-1); animation: rise .2s ease; }
   .toast.err { border-left-color: var(--red); }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
@@ -108,8 +135,8 @@
     <p class="lead">Parts to buy and add to the inventory. Anyone can request a part; managing the list (status, delete) needs admin login.</p>
     <section id="wishlist">
       <div class="wl-head">
-        <span class="wl-title">Requests <span class="wl-count" id="wl-count"></span></span>
-        <button class="btn primary" id="wl-add-btn">+ Request part</button>
+        <span class="wl-title">Requests <span class="wl-count" id="wl-count" aria-live="polite"></span></span>
+        <button class="btn primary" id="wl-add-btn">Request part</button>
       </div>
       <div class="wl-list" id="wl-list"></div>
     </section>
@@ -117,18 +144,18 @@
 
   <!-- request a part to buy -->
   <div class="overlay" id="wl-overlay">
-    <div class="modal" style="max-width:480px">
-      <h3>Request a part to buy</h3>
+    <div class="modal" style="max-width:480px" role="dialog" aria-modal="true" aria-labelledby="wl-modal-title">
+      <h3 id="wl-modal-title">Request a part to buy</h3>
       <div class="form">
-        <div class="field full"><label>Part <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— what to buy</span></label><input id="w-part" placeholder="e.g. 10kΩ 1/4W resistor (100-pack)"></div>
-        <div class="field"><label>Project</label><input id="w-project" placeholder="e.g. soil logger"></div>
-        <div class="field"><label>Type of product</label><input id="w-type" placeholder="e.g. Resistor"></div>
-        <div class="field"><label>Quantity</label><input id="w-quantity" type="number" min="1" value="1"></div>
-        <div class="field"><label>Requested by</label><input id="w-by" placeholder="optional"></div>
-        <div class="field full"><label>Reason</label><textarea id="w-reason" placeholder="Why it's needed / what it's for…"></textarea></div>
+        <div class="field full"><label for="w-part">Part <span style="text-transform:none;letter-spacing:0;color:var(--dim)">— what to buy</span></label><input id="w-part" placeholder="e.g. 10kΩ 1/4W resistor (100-pack)"></div>
+        <div class="field"><label for="w-project">Project</label><input id="w-project" placeholder="e.g. soil logger"></div>
+        <div class="field"><label for="w-type">Type of product</label><input id="w-type" placeholder="e.g. Resistor"></div>
+        <div class="field"><label for="w-quantity">Quantity</label><input id="w-quantity" type="number" min="1" value="1"></div>
+        <div class="field"><label for="w-by">Requested by</label><input id="w-by" placeholder="optional"></div>
+        <div class="field full"><label for="w-reason">Reason</label><textarea id="w-reason" placeholder="Why it's needed / what it's for…"></textarea></div>
       </div>
       <div class="foot">
-        <div class="status-line" id="w-status"></div>
+        <div class="status-line" id="w-status" role="status" aria-live="polite"></div>
         <div class="spacer"></div>
         <button class="btn" id="w-cancel">Cancel</button>
         <button class="btn primary" id="w-submit">Request</button>
@@ -138,12 +165,12 @@
 
   <!-- login -->
   <div class="overlay" id="login-overlay">
-    <div class="modal" style="max-width:380px">
+    <div class="modal" style="max-width:380px" role="dialog" aria-modal="true" aria-labelledby="l-title">
       <h3 id="l-title">Log in to manage</h3>
       <div class="form" style="grid-template-columns:1fr">
-        <div class="field full"><label>Username</label><input id="l-user" autocomplete="username"></div>
-        <div class="field full"><label>Password</label><input id="l-pass" type="password" autocomplete="current-password"></div>
-        <div class="field full"><div class="status-line" id="l-status">Requesting is public — log in to manage the list.</div></div>
+        <div class="field full"><label for="l-user">Username</label><input id="l-user" autocomplete="username"></div>
+        <div class="field full"><label for="l-pass">Password</label><input id="l-pass" type="password" autocomplete="current-password"></div>
+        <div class="field full"><div class="status-line" id="l-status" role="status" aria-live="polite">Requesting is public — log in to manage the list.</div></div>
       </div>
       <div class="foot">
         <div class="spacer"></div>
@@ -153,7 +180,7 @@
     </div>
   </div>
 
-  <div class="toasts" id="toasts"></div>
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
 <script>
 let WISHLIST = [];
@@ -269,13 +296,13 @@ function renderWishlist(list) {
       </div>
       <div class="wl-right">
         ${isAdmin
-          ? `<select data-act="status">${WL_STATUSES.map(s =>
+          ? `<select data-act="status" aria-label="Status for ${esc(w.part || 'request')}">${WL_STATUSES.map(s =>
               `<option value="${s}" ${s === st ? 'selected' : ''}>${s}</option>`).join('')}</select>
-             <button class="wl-del" data-act="del" title="Delete request">🗑</button>`
+             <button class="wl-del" data-act="del" title="Delete request" aria-label="Delete request for ${esc(w.part || 'item')}">🗑</button>`
           : `<span class="wl-badge st-${st}">${st}</span>`}
       </div>
     </div>`;
-  }).join('') : `<div class="empty"><div class="big">🛒</div><div>Nothing requested yet. ${isAdmin ? 'Hit <b>+ Request part</b> or ask via the MCP agent.' : 'Anyone can add one with <b>+ Request part</b>.'}</div></div>`;
+  }).join('') : `<div class="empty"><div class="big">🛒</div><div>Nothing requested yet. ${isAdmin ? 'Select <b>Request part</b> or ask via the MCP agent.' : 'Anyone can add one with <b>Request part</b>.'}</div></div>`;
 }
 $('wl-list').addEventListener('change', async e => {
   const sel = e.target.closest('select[data-act="status"]'); if (!sel) return;
@@ -325,6 +352,22 @@ async function poll() {
 }
 checkAuth();
 poll();
+
+// ---- live reload: pick up deploys without a manual refresh ----
+(() => {
+  let stamp = null;
+  async function check() {
+    try {
+      const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+      const lm = r.headers.get('Last-Modified');
+      if (lm) {
+        if (stamp && lm !== stamp) location.reload();
+        stamp = lm;
+      }
+    } catch (e) {}
+  }
+  setInterval(check, 10000); check();
+})();
 </script>
 </body>
 </html>

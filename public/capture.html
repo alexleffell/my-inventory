@@ -5,27 +5,58 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Moshe's Inventory — Capture</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>📸</text></svg>" />
-<meta name="theme-color" content="#0b0f14" />
+<meta name="theme-color" content="#0c0b09" />
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    /* surfaces — warm graphite (brown-dominant, deliberately not blue-black) */
+    --bg: #0c0b09; --panel: #14130e; --panel2: #1b1913; --panel3: #23201a;
+    --line: #262319; --line2: #363127; --line3: #4b4536;
+    /* text — warm whites to match the ground */
+    --text: #ede9e2; --dim: #a09a8e; --dim2: #c6c0b6; --faint: #6e6a60;
+    /* copper: the physical-storage layer (bags, bins, locations) */
+    --copper: #d99a55; --copperfg: #e8b477; --copperbg: #d9873c14; --copperline: #a0653052;
+    /* cool accent: digital things (links, categories, 3D) */
+    --blue: #58a6ff; --bluebg: #1f6feb24; --bluefg: #8ec7ff;
+    /* status */
+    --green: #238636; --green2: #2ea043; --okfg: #4ac26b; --okbg: #2386361f;
+    --red: #da3633; --redbg: #f8514922; --redfg: #ff8078;
+    --warnfg: #e8c34e; --warnbg: #e3b3410f; --warnline: #e3b34152;
+    --focus: #74b7ff;
+    /* the "datasheet" voice: every data value renders in mono */
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    /* elevation + radii */
+    --shadow-1: 0 1px 2px #0006, 0 6px 18px -8px #0009;
+    --shadow-2: 0 2px 8px #0008, 0 20px 48px -16px #000d;
+    --r-ctl: 10px; --r-card: 14px; --r-modal: 16px; --r-tag: 3px;
+  }
   * { box-sizing: border-box; }
   html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0; font: 15px/1.4 -apple-system, system-ui, sans-serif;
-    background: #0b0f14; color: #e6edf3; padding: 20px;
+    margin: 0; font: 15px/1.5 -apple-system, system-ui, sans-serif;
+    background: var(--bg); color: var(--text); padding: 20px;
     padding: max(20px, env(safe-area-inset-top)) 20px 20px;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  input, select, textarea { font: inherit; }
+  ::placeholder { color: var(--faint); }
+  ::selection { background: #6f4d26; color: #fff; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   }
 
   /* identification queue */
   .queue-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px;
-                 padding: 10px 13px; border: 1px solid #2a3a4a; background: #0f1722; border-radius: 12px; }
+                 padding: 10px 13px; border: 1px solid var(--warnline); background: var(--warnbg); border-radius: var(--r-card); }
   .queue-strip:empty { display: none; }
-  .queue-strip .qhead { font-size: 13px; color: #e3b341; display: flex; align-items: center; gap: 7px; font-weight: 600; }
-  .queue-strip .spin { width: 12px; height: 12px; border: 2px solid #e3b34144; border-top-color: #e3b341; border-radius: 50%; animation: spin .8s linear infinite; }
+  .queue-strip .qhead { font-size: 13px; color: var(--warnfg); display: flex; align-items: center; gap: 7px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .queue-strip .spin { width: 12px; height: 12px; border: 2px solid var(--warnline); border-top-color: var(--warnfg); border-radius: 50%; animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .queue-strip .qitem { display: flex; align-items: center; gap: 5px; }
-  .queue-strip .qitem img { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid #2a3340; }
-  .queue-strip .qstat { font-size: 11px; color: #768390; }
+  .queue-strip .qitem img { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line2); }
+  .queue-strip .qstat { font-size: 11px; color: var(--dim); }
 
   /* mobile: bigger touch targets, full-width controls */
   @media (max-width: 620px) {
@@ -35,120 +66,126 @@
     .controls select { flex: 1 1 100%; }
     .controls button { flex: 1; padding: 13px 12px; font-size: 16px; }
     button.primary, .additem, #additem { min-height: 48px; }
-    .qtyrow input, select, input { font-size: 16px; }  /* avoid iOS zoom-on-focus */
+    input, select, textarea { font-size: 16px; }  /* avoid iOS zoom-on-focus */
     .shot img { width: 76px; height: 76px; }
     #additem, #discard { flex: 1; min-height: 48px; }
   }
   header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
   h1 { font-size: 18px; margin: 0; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #768390; margin: 0 0 10px; }
-  a { color: #58a6ff; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin: 0 0 10px; }
+  a { color: var(--blue); }
   .wrap { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; align-items: start; }
   @media (max-width: 880px) { .wrap { grid-template-columns: 1fr; } }
   .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  select, button, input {
-    font: inherit; border-radius: 9px; border: 1px solid #2a3340;
-    background: #161b22; color: #e6edf3; padding: 9px 12px;
+  select, input, textarea {
+    border-radius: var(--r-ctl); border: 1px solid var(--line2);
+    background: var(--panel2); color: var(--text); padding: 9px 12px;
   }
-  button.primary { background: #238636; border-color: #2ea043; font-weight: 600; cursor: pointer; }
+  .btn { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 14px;
+         display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none;
+         transition: border-color .15s, background .15s, transform .08s; }
+  .btn:hover { border-color: var(--line3); background: var(--panel3); }
+  .btn:active { transform: scale(.96); }
+  .btn.primary { background: var(--green); border-color: var(--green2); font-weight: 600; }
+  .btn.primary:hover { background: var(--green2); }
   button.primary:disabled { opacity: .45; cursor: default; }
-  button.ghost { cursor: pointer; }
   .stage { position: relative; }
-  video { width: 100%; border-radius: 14px; background: #000; display: block; }
-  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; border-radius: 14px; pointer-events: none; }
+  video { width: 100%; border-radius: var(--r-card); background: #000; display: block; }
+  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; border-radius: var(--r-card); pointer-events: none; }
   .flash.go { animation: f .25s ease; }
   @keyframes f { from { opacity: .8; } to { opacity: 0; } }
-  .meta { margin: 8px 0; color: #9aa7b4; }
-  .meta b { color: #e6edf3; }
-  .hint { color: #768390; font-size: 13px; }
+  .meta { margin: 8px 0; color: var(--dim2); }
+  .meta b { color: var(--text); }
+  .hint { color: var(--dim); font-size: 13px; }
   .cam-controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin: 4px 0 2px; }
   .cam-controls:empty { display: none; }
-  .cam-controls .ctl { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #9aa7b4; }
-  .cam-controls input[type=range] { width: 150px; accent-color: #2ea043; }
-  .cam-controls .toggle { cursor: pointer; border: 1px solid #2a3340; background: #161b22; border-radius: 8px; padding: 6px 11px; color: #e6edf3; }
-  .cam-controls .toggle.on { background: #238636; border-color: #2ea043; }
-  .cam-controls .nocaps { color: #56616d; font-size: 12px; }
-  kbd { background:#161b22; border:1px solid #2a3340; border-radius:5px; padding:1px 6px; }
+  .cam-controls .ctl { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--dim2); }
+  .cam-controls input[type=range] { width: 150px; accent-color: var(--green2); }
+  .cam-controls .toggle { border: 1px solid var(--line2); background: var(--panel2); border-radius: var(--r-ctl); padding: 6px 11px; color: var(--text); }
+  .cam-controls .toggle.on { background: var(--green); border-color: var(--green2); }
+  .cam-controls .nocaps { color: var(--faint); font-size: 12px; }
+  kbd { background: var(--panel2); border: 1px solid var(--line2); border-radius: 5px; padding: 1px 6px; }
 
   /* current-item staging */
-  .curitem { margin-top: 22px; background: #11161d; border: 1px solid #2a3340; border-radius: 14px; padding: 14px; }
+  .curitem { margin-top: 22px; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r-card); padding: 14px; }
   .curitem.empty { border-style: dashed; opacity: .8; }
   .strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; min-height: 8px; }
   .shot { position: relative; }
-  .shot img { width: 92px; height: 92px; object-fit: cover; border-radius: 8px; border: 1px solid #2a3340; display: block; }
+  .shot img { width: 92px; height: 92px; object-fit: cover; border-radius: var(--r-ctl); border: 1px solid var(--line2); display: block; }
   .shot .x { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%;
-             background: #da3633; color: #fff; border: none; font-size: 12px; line-height: 1; cursor: pointer; }
-  .shot .num { position: absolute; bottom: 4px; left: 4px; background: #0a0e13cc; border-radius: 5px; padding: 0 5px; font-size: 11px; }
-  .nostrip { color: #56616d; font-size: 13px; padding: 14px 0; }
+             background: var(--red); color: #fff; border: none; font-size: 12px; line-height: 1; padding: 0; }
+  .shot .num { position: absolute; bottom: 4px; left: 4px; background: #0c0b09cc; border-radius: 5px; padding: 0 5px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .nostrip { color: var(--faint); font-size: 13px; padding: 14px 0; }
   .fields { display: flex; flex-direction: column; gap: 9px; }
   .qtyrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .qtyrow label { font-size: 11px; color: #768390; min-width: 42px; }
-  .qtyrow input[type=number] { width: 78px; text-align: center; }
+  .qtyrow label { font-size: 11px; color: var(--dim); min-width: 42px; }
+  .qtyrow input[type=number] { width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
   .note { width: 100%; }
   .actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  .status-line { color: #768390; font-size: 12px; }
+  .status-line { color: var(--dim); font-size: 12px; }
+  #shotcount, #itemstatus { font-variant-numeric: tabular-nums; }
 
   /* live inventory */
   .inv { display: flex; flex-direction: column; gap: 8px; max-height: 72vh; overflow: auto; }
-  .item { display: flex; gap: 10px; align-items: center; background: #11161d; border: 1px solid #1c2430; border-radius: 10px; padding: 8px 10px; }
+  .item { display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); padding: 8px 10px; }
   .item .thumb { position: relative; width: 44px; height: 44px; flex: none; }
   .item img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background:#05080c; }
-  .item .badge { position: absolute; right: -4px; bottom: -4px; background: #1f6feb; color:#fff; border-radius: 6px; font-size: 10px; padding: 0 4px; }
+  .item .badge { position: absolute; right: -4px; bottom: -4px; background: var(--blue); color: #fff; border-radius: 6px; font-size: 10px; padding: 0 4px; font-variant-numeric: tabular-nums; }
   .item .n { font-weight: 600; font-size: 14px; }
-  .item .c { font-size: 12px; color: #79c0ff; }
-  .item .q { margin-left: auto; background: #238636; color: #fff; font-weight: 700; border-radius: 7px; padding: 2px 9px; font-size: 13px; }
+  .item .c { font-size: 12px; color: var(--bluefg); }
+  .item .q { margin-left: auto; background: var(--green); color: #fff; font-weight: 700; border-radius: 7px; padding: 2px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
   .totals { display: flex; gap: 18px; margin-bottom: 10px; }
-  .totals b { font-size: 19px; display: block; }
-  .totals span { color: #768390; font-size: 11px; text-transform: uppercase; }
-  .invempty { color: #768390; font-size: 13px; padding: 20px 0; }
+  .totals b { font-size: 19px; display: block; font-variant-numeric: tabular-nums; }
+  .totals span { color: var(--dim); font-size: 11px; text-transform: uppercase; }
+  .invempty { color: var(--dim); font-size: 13px; padding: 20px 0; }
 
   /* pending duplicate decisions */
   .pending-decisions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
   .pending-decisions:empty { display: none; }
-  .dup-card { border: 1px solid #bb800988; background: #bb800914; border-radius: 14px; padding: 14px 16px; }
+  .dup-card { border: 1px solid var(--warnline); background: var(--warnbg); border-radius: var(--r-card); padding: 14px 16px; }
   .dup-head { font-size: 15px; margin-bottom: 9px; }
-  .dup-head b { color: #e3b341; }
-  .dup-cmp { display: flex; gap: 20px; flex-wrap: wrap; color: #9aa7b4; font-size: 14px; margin-bottom: 10px; }
-  .dup-cmp b { color: #e6edf3; }
+  .dup-head b { color: var(--warnfg); }
+  .dup-cmp { display: flex; gap: 20px; flex-wrap: wrap; color: var(--dim2); font-size: 14px; margin-bottom: 10px; }
+  .dup-cmp b { color: var(--text); }
   .dup-thumbs { display: flex; gap: 6px; margin-bottom: 11px; }
-  .dup-thumbs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid #2a3340; }
+  .dup-thumbs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line2); }
   .dup-btns { display: flex; gap: 8px; flex-wrap: wrap; }
-  .dup-btns button { border-radius: 9px; border: 1px solid #2a3340; background: #161b22; color: #e6edf3; padding: 8px 13px; font: inherit; cursor: pointer; }
-  .dup-btns button.go { background: #238636; border-color: #2ea043; font-weight: 600; }
-  .dup-btns button.skip { margin-left: auto; color: #768390; border-color: transparent; background: transparent; }
-  .dup-btns button.skip:hover { color: #e6edf3; border-color: #2a3340; }
+  .dup-btns button { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 8px 13px; }
+  .dup-btns button.go { background: var(--green); border-color: var(--green2); font-weight: 600; }
+  .dup-btns button.skip { margin-left: auto; color: var(--dim); border-color: transparent; background: transparent; }
+  .dup-btns button.skip:hover { color: var(--text); border-color: var(--line2); }
   .dup-btns button:disabled { opacity: .5; cursor: default; }
   .dup-edit { display: flex; flex-direction: column; gap: 8px; margin-bottom: 11px; }
-  .dup-edit .d-name { width: 100%; border-radius: 8px; border: 1px solid #2a3340; background: #161b22; color: #e6edf3; padding: 9px 11px; font-weight: 600; }
+  .dup-edit .d-name { width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 11px; font-weight: 600; }
   .dup-edit .d-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .dup-edit .d-row label { font-size: 12px; color: #768390; }
-  .dup-edit .d-row input { border-radius: 8px; border: 1px solid #2a3340; background: #161b22; color: #e6edf3; padding: 7px 10px; }
-  .dup-edit .d-qty { width: 72px; text-align: center; }
+  .dup-edit .d-row label { font-size: 12px; color: var(--dim); }
+  .dup-edit .d-row input { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 7px 10px; }
+  .dup-edit .d-qty { width: 72px; text-align: center; font-variant-numeric: tabular-nums; }
   .dup-edit .d-loc { width: 130px; }
   .dup-matches { margin-bottom: 11px; }
-  .m-title { font-size: 12px; color: #768390; margin-bottom: 4px; }
+  .m-title { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
   .m-row { display: flex; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid #ffffff12; flex-wrap: wrap; }
-  .m-info { flex: 1; font-size: 13px; color: #cdd6df; min-width: 170px; }
-  .m-row button { border-radius: 8px; border: 1px solid #2a3340; background: #161b22; color: #e6edf3; padding: 6px 11px; font: inherit; cursor: pointer; }
-  .m-row button:hover { border-color: #3a4654; }
-  .m-row button.go { background: #238636; border-color: #2ea043; font-weight: 600; }
+  .m-info { flex: 1; font-size: 13px; color: var(--dim2); min-width: 170px; font-variant-numeric: tabular-nums; }
+  .m-row button { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 6px 11px; }
+  .m-row button:hover { border-color: var(--line3); }
+  .m-row button.go { background: var(--green); border-color: var(--green2); font-weight: 600; }
   .m-row button:disabled { opacity: .5; cursor: default; }
-  .dup-status { margin-top: 10px; font-size: 13px; min-height: 18px; }
-  .dup-status.ok { color: #3fb950; font-weight: 600; }
-  .dup-status.err { color: #ff7b72; }
+  .dup-status { margin-top: 10px; font-size: 13px; min-height: 18px; font-variant-numeric: tabular-nums; }
+  .dup-status.ok { color: var(--okfg); font-weight: 600; }
+  .dup-status.err { color: var(--redfg); }
 
   /* zoom & crop modal */
   .crop-overlay { position: fixed; inset: 0; background: #000000cc; backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 90; padding: 20px; }
   .crop-overlay.show { display: flex; }
-  .crop-box { background: #11161d; border: 1px solid #2a3340; border-radius: 14px; padding: 16px; max-width: 92vw; }
-  .crop-title { font-size: 14px; color: #9aa7b4; margin-bottom: 10px; }
-  #crop-canvas { width: min(440px, 82vw); height: auto; aspect-ratio: 4/3; background: #000; border-radius: 10px; cursor: grab; touch-action: none; display: block; }
+  .crop-box { background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r-modal); padding: 16px; max-width: 92vw; box-shadow: var(--shadow-2); }
+  .crop-title { font-size: 14px; color: var(--dim2); margin-bottom: 10px; }
+  #crop-canvas { width: min(440px, 82vw); height: auto; aspect-ratio: 4/3; background: #000; border-radius: var(--r-ctl); cursor: grab; touch-action: none; display: block; }
   #crop-canvas:active { cursor: grabbing; }
-  .crop-controls { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: #9aa7b4; font-size: 13px; }
-  .crop-controls input[type=range] { flex: 1; accent-color: #2ea043; }
+  .crop-controls { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--dim2); font-size: 13px; }
+  .crop-controls input[type=range] { flex: 1; accent-color: var(--green2); }
   .crop-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-  .crop-actions button { border-radius: 9px; border: 1px solid #2a3340; background: #161b22; color: #e6edf3; padding: 9px 13px; font: inherit; cursor: pointer; }
-  .crop-actions button.primary { background: #238636; border-color: #2ea043; font-weight: 600; }
+  .crop-actions button { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 13px; }
+  .crop-actions button.primary { background: var(--green); border-color: var(--green2); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -157,23 +194,23 @@
     <a href="/dashboard">← Back to dashboard</a>
   </header>
 
-  <div id="queue-strip" class="queue-strip"></div>
+  <div id="queue-strip" class="queue-strip" role="status" aria-live="polite"></div>
   <div id="pending-decisions" class="pending-decisions"></div>
 
   <div class="wrap">
     <!-- LEFT: camera + current item -->
     <div>
       <div class="controls">
-        <select id="cam" title="Choose camera"></select>
-        <button class="primary" id="snap">📸 Capture photo</button>
-        <button class="ghost" id="upload-btn">📁 Upload</button>
-        <input type="file" id="file-input" accept="image/*" hidden>
+        <select id="cam" title="Choose camera" aria-label="Choose camera"></select>
+        <button class="btn primary" id="snap">📸 Capture photo</button>
+        <button class="btn ghost" id="upload-btn">📁 Upload</button>
+        <input type="file" id="file-input" accept="image/*" aria-label="Upload photos" hidden>
       </div>
       <div class="stage">
         <video id="v" autoplay playsinline muted></video>
         <div class="flash" id="flash"></div>
       </div>
-      <p class="meta" id="status">Starting camera…</p>
+      <p class="meta" id="status" role="status" aria-live="polite">Starting camera…</p>
       <div id="cam-controls" class="cam-controls"></div>
       <p class="hint">
         Take <b>as many photos as you like for one item</b> (label front/back, the
@@ -186,22 +223,22 @@
         <div class="strip" id="strip"><div class="nostrip" id="nostrip">No photos yet — press Capture.</div></div>
         <div class="fields">
           <div class="qtyrow">
-            <label>Qty</label>
-            <button class="ghost" data-d="-1">−</button>
+            <label for="qty">Qty</label>
+            <button class="btn ghost" data-d="-1" aria-label="Decrease quantity">−</button>
             <input type="number" min="1" class="qty" id="qty" placeholder="auto">
-            <button class="ghost" data-d="1">+</button>
+            <button class="btn ghost" data-d="1" aria-label="Increase quantity">+</button>
             <span class="status-line">blank = read pack count off the label</span>
           </div>
           <div class="qtyrow">
-            <label>Where</label>
+            <label for="ctype">Where</label>
             <select id="ctype"><option value="Bag">Bag</option><option value="Bin">Bin</option><option value="Tray">Tray</option></select>
-            <input type="number" min="1" id="cnum" placeholder="#" style="width:78px">
+            <input type="number" min="1" id="cnum" placeholder="#" aria-label="Location number" style="width:78px">
           </div>
-          <input class="note" id="note" placeholder="Note / part name (optional)">
+          <input class="note" id="note" placeholder="Note / part name (optional)" aria-label="Note or part name">
           <div class="actions">
-            <button class="primary" id="additem" disabled>✓ Add to inventory</button>
-            <button class="ghost" id="discard">Discard</button>
-            <span class="status-line" id="itemstatus"></span>
+            <button class="btn primary" id="additem" disabled>✓ Add to inventory</button>
+            <button class="btn ghost" id="discard">Discard</button>
+            <span class="status-line" id="itemstatus" role="status" aria-live="polite"></span>
           </div>
         </div>
       </div>
@@ -221,17 +258,17 @@
   </div>
 
 <div class="crop-overlay" id="crop-overlay">
-  <div class="crop-box">
-    <div class="crop-title">Zoom &amp; crop — drag to position, slider/scroll to zoom</div>
+  <div class="crop-box" role="dialog" aria-modal="true" aria-labelledby="crop-title">
+    <div class="crop-title" id="crop-title">Zoom &amp; crop — drag to position, slider/scroll to zoom</div>
     <canvas id="crop-canvas" width="800" height="600"></canvas>
     <div class="crop-controls">
-      <span>🔍 Zoom</span>
+      <label for="crop-zoom">🔍 Zoom</label>
       <input type="range" id="crop-zoom" min="1" max="4" step="0.01" value="1">
     </div>
     <div class="crop-actions">
-      <button id="crop-cancel">Cancel</button>
-      <button id="crop-full">Use full image</button>
-      <button class="primary" id="crop-confirm">Crop &amp; use</button>
+      <button class="btn" id="crop-cancel">Cancel</button>
+      <button class="btn" id="crop-full">Use full image</button>
+      <button class="btn primary" id="crop-confirm">Crop &amp; use</button>
     </div>
   </div>
 </div>
@@ -354,10 +391,10 @@ function buildCamControls(track) {
   if (caps.focusMode && caps.focusMode.includes('manual') && caps.focusDistance) {
     const fd = caps.focusDistance; // min = nearest
     const near = document.createElement('button');
-    near.className = 'toggle'; near.textContent = '🔍 Near focus';
+    near.className = 'btn toggle'; near.textContent = '🔍 Near focus';
     const range = document.createElement('input');
     range.type = 'range'; range.min = fd.min; range.max = fd.max; range.step = fd.step || (fd.max - fd.min) / 100;
-    range.value = cur.focusDistance ?? fd.min; range.style.display = 'none';
+    range.value = cur.focusDistance ?? fd.min; range.style.display = 'none'; range.setAttribute('aria-label', 'Focus distance');
     near.addEventListener('click', () => {
       const on = near.classList.toggle('on');
       if (on) { apply({ focusMode: 'manual', focusDistance: fd.min }); range.value = fd.min; range.style.display = ''; }
@@ -368,7 +405,7 @@ function buildCamControls(track) {
     wrap.append(near, range); box.appendChild(wrap);
   } else if (caps.focusMode && caps.focusMode.includes('manual')) {
     // manual focus but no distance range exposed
-    const b = document.createElement('button'); b.className = 'toggle'; b.textContent = '🔍 Lock focus (near)';
+    const b = document.createElement('button'); b.className = 'btn toggle'; b.textContent = '🔍 Lock focus (near)';
     b.addEventListener('click', () => { const on = b.classList.toggle('on'); apply({ focusMode: on ? 'manual' : 'continuous' }); });
     const w = document.createElement('div'); w.className = 'ctl'; w.appendChild(b); box.appendChild(w);
   }
@@ -378,7 +415,7 @@ function buildCamControls(track) {
     const z = caps.zoom;
     const range = document.createElement('input');
     range.type = 'range'; range.min = z.min; range.max = z.max; range.step = z.step || (z.max - z.min) / 100;
-    range.value = cur.zoom ?? z.min;
+    range.value = cur.zoom ?? z.min; range.setAttribute('aria-label', 'Camera zoom');
     range.addEventListener('input', () => apply({ zoom: +range.value }));
     const wrap = document.createElement('div'); wrap.className = 'ctl';
     const lbl = document.createElement('span'); lbl.textContent = '🔭 Zoom';
@@ -387,7 +424,7 @@ function buildCamControls(track) {
 
   // Torch (light)
   if (caps.torch) {
-    const b = document.createElement('button'); b.className = 'toggle'; b.textContent = '💡 Light';
+    const b = document.createElement('button'); b.className = 'btn toggle'; b.textContent = '💡 Light';
     b.addEventListener('click', () => { const on = b.classList.toggle('on'); apply({ torch: on }); });
     const w = document.createElement('div'); w.className = 'ctl'; w.appendChild(b); box.appendChild(w);
   }
@@ -446,9 +483,9 @@ function renderStrip() {
   if (!currentFiles.length) { strip.innerHTML = '<div class="nostrip">No photos yet — press Capture.</div>'; return; }
   strip.innerHTML = currentFiles.map((f, i) => `
     <div class="shot">
-      <img src="/captures/${esc(f)}" alt="">
+      <img src="/captures/${esc(f)}" alt="Captured photo ${i+1}">
       <span class="num">${i+1}</span>
-      <button class="x" data-rm="${esc(f)}" title="Remove">×</button>
+      <button class="btn x" data-rm="${esc(f)}" title="Remove" aria-label="Remove photo ${i+1}">×</button>
     </div>`).join('');
 }
 $('strip').addEventListener('click', e => {
@@ -515,24 +552,24 @@ function renderPending(pending) {
     return `<div class="dup-card" data-pid="${esc(p.pending_id)}">
       <div class="dup-head">⚠ Possible duplicate — set what it is and which bag</div>
       <div class="dup-edit">
-        <input class="d-name" value="${esc(c.name || '')}" placeholder="What exactly is in this bag?">
+        <input class="d-name" value="${esc(c.name || '')}" placeholder="What exactly is in this bag?" aria-label="Item name">
         <div class="d-row">
-          <label>Qty</label><input type="number" min="0" class="d-qty" value="${c.quantity ?? 1}">
-          <label>Bag</label><input class="d-loc" value="${esc(c.location || '')}" placeholder="e.g. Bag 14">
+          <label>Qty</label><input type="number" min="0" class="d-qty" value="${c.quantity ?? 1}" aria-label="Quantity">
+          <label>Bag</label><input class="d-loc" value="${esc(c.location || '')}" placeholder="e.g. Bag 14" aria-label="Bag location">
         </div>
       </div>
-      <div class="dup-thumbs">${imgs.map(f => `<img src="/captures/${esc(f)}">`).join('')}</div>
+      <div class="dup-thumbs">${imgs.map(f => `<img src="/captures/${esc(f)}" alt="Possible duplicate photo">`).join('')}</div>
       ${matches.length ? `<div class="dup-matches"><div class="m-title">Add to a bag that already has this:</div>${matches.map(m => `
         <div class="m-row">
           <span class="m-info">📍 ${esc(m.location || '—')} · ×${m.quantity ?? 1} · ${esc(m.name || '')}</span>
-          <button class="go" data-act="add" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}" data-cur="${m.quantity ?? 1}">＋ Save: add to this bag</button>
-          <button data-act="set" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}">Set qty</button>
+          <button class="btn go" data-act="add" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}" data-cur="${m.quantity ?? 1}">＋ Save: add to this bag</button>
+          <button class="btn" data-act="set" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}">Set qty</button>
         </div>`).join('')}</div>` : ''}
       <div class="dup-btns">
-        <button class="go" data-act="separate">Save as new entry (Bag above)</button>
-        <button class="skip" data-act="dismiss" title="Dismiss — nothing logged or changed">Skip</button>
+        <button class="btn go" data-act="separate">Save as new entry (Bag above)</button>
+        <button class="btn skip" data-act="dismiss" title="Dismiss — nothing logged or changed">Skip</button>
       </div>
-      <div class="dup-status"></div>
+      <div class="dup-status" role="status" aria-live="polite"></div>
     </div>`;
   }).join('');
 }
@@ -577,7 +614,7 @@ function renderQueue(queue) {
     queue.map(q => {
       const img = (q.images || [])[0];
       const loc = q.location ? esc(q.location) + ' · ' : '';
-      return `<span class="qitem">${img ? `<img src="/captures/${esc(img)}">` : ''}<span class="qstat">${loc}${esc(q.status)}</span></span>`;
+      return `<span class="qitem">${img ? `<img src="/captures/${esc(img)}" alt="Upload being identified">` : ''}<span class="qstat">${loc}${esc(q.status)}</span></span>`;
     }).join('');
 }
 async function poll() {
@@ -596,7 +633,7 @@ async function poll() {
       return `
       <div class="item">
         <div class="thumb">
-          ${imgs.length ? `<img src="/captures/${esc(imgs[0])}">` : `<img>`}
+          ${imgs.length ? `<img src="/captures/${esc(imgs[0])}" alt="${esc(it.name || 'Inventory item')}">` : `<img alt="No inventory image">`}
           ${imgs.length > 1 ? `<span class="badge">${imgs.length}</span>` : ''}
         </div>
         <div>
@@ -615,6 +652,22 @@ renderStrip();
 start().catch(e => {
   statusEl.textContent = 'Camera error: ' + e.message + ' — grant camera permission in System Settings › Privacy.';
 });
+
+// ---- live reload: pick up deploys without a manual refresh ----
+(() => {
+  let stamp = null;
+  async function check() {
+    try {
+      const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
+      const lm = r.headers.get('Last-Modified');
+      if (lm) {
+        if (stamp && lm !== stamp && !stream?.active && currentFiles.length === 0) location.reload();
+        stamp = lm;
+      }
+    } catch (e) {}
+  }
+  setInterval(check, 10000); check();
+})();
 </script>
 </body>
 </html>
