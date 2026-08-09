@@ -245,6 +245,156 @@ def check_credentials(auth_header):
     return None
 
 
+# Public routes deliberately kept OUT of the OpenAPI document: they exist for the
+# app's own pages, not for third-party agents. tests/test_openapi.py requires every
+# other public /api/ route to be documented, so adding one forces a choice here.
+OPENAPI_INTERNAL = {
+    "/api/identify/status",   # UI probe: is the identify watcher wired up
+    "/api/pending",           # duplicate decisions, resolved in the dashboard UI
+    "/api/login",             # auth handshake for the dashboard
+    "/api/setup",             # first-run admin creation
+}
+
+ITEM_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "id": {"type": "string", "description": "Stable item id."},
+        "name": {"type": "string", "description": "Part name. Empty while an item is still being identified from its photos."},
+        "category": {"type": "string", "description": "e.g. Sensors, Power, Resistors, Modules."},
+        "quantity": {"type": "integer", "description": "Units in stock."},
+        "location": {"type": "string", "description": "Physical storage, formatted '<Bag|Bin> <number>' (e.g. 'Bag 15')."},
+        "condition": {"type": "string"},
+        "notes": {"type": "string", "description": "Free text: SKUs, specs, provenance. The word 'unconfirmed' means the value is a guess."},
+        "images": {"type": "array", "items": {"type": "string"},
+                   "description": "Photo filenames; fetch at <server>/captures/<filename>. The first one shows the actual part."},
+        "models": {"type": "array", "items": {"type": "string"},
+                   "description": "Attached 3D model filenames; download at <server>/models/<filename>."},
+    },
+}
+
+
+def openapi_spec(base_url):
+    """OpenAPI 3.1 description of the PUBLIC (unauthenticated) API, for LLM tool
+    use: ChatGPT Actions, LangChain, n8n, anything that speaks OpenAPI. Admin
+    endpoints are deliberately absent — they need Basic auth and are not for
+    third-party agents. tests/test_openapi.py fails if a public route added to
+    the handlers is missing here."""
+    def _items_response(desc):
+        return {"200": {"description": desc, "content": {"application/json": {"schema": {
+            "type": "object",
+            "properties": {"count": {"type": "integer"},
+                           "items": {"type": "array", "items": ITEM_SCHEMA}},
+        }}}}}
+
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "Inventory",
+            "version": "1.0.0",
+            "description": (
+                "A photo-driven inventory of small parts (electronic components, hardware, "
+                "craft supplies) stored in numbered bags and bins. Read endpoints are public. "
+                "Use /api/summary first to see what categories and locations exist, then "
+                "/api/query to search. If a needed part is not in stock, POST /api/wishlist "
+                "to ask for it to be bought."
+            ),
+        },
+        "servers": [{"url": base_url}],
+        "paths": {
+            "/api/summary": {"get": {
+                "operationId": "getSummary",
+                "summary": "Overview of the whole inventory.",
+                "description": "Item/unit totals plus a breakdown by category and by storage location, "
+                               "and how many purchase requests are open. Small response — call this "
+                               "before searching to learn the real category and location names.",
+                "responses": {"200": {"description": "Totals and breakdowns.", "content": {"application/json": {"schema": {
+                    "type": "object",
+                    "properties": {
+                        "total_items": {"type": "integer"},
+                        "total_units": {"type": "integer"},
+                        "categories": {"type": "array", "items": {"type": "object", "properties": {
+                            "name": {"type": "string"}, "items": {"type": "integer"}}}},
+                        "locations": {"type": "array", "items": {"type": "object", "properties": {
+                            "name": {"type": "string"}, "items": {"type": "integer"}}}},
+                        "wishlist_total": {"type": "integer"},
+                        "wishlist_open": {"type": "integer"},
+                    },
+                }}}}},
+            }},
+            "/api/query": {"get": {
+                "operationId": "searchInventory",
+                "summary": "Search and filter the inventory.",
+                "description": "Ranked full-text search over name, category, location, notes and model "
+                               "filenames. Multiple search words are ANDed. Prefer this over fetching "
+                               "the whole inventory. An empty result means the part is not in stock.",
+                "parameters": [
+                    {"name": "search", "in": "query", "required": False, "schema": {"type": "string"},
+                     "description": "Free text, e.g. 'esp32' or 'shunt resistor'. Space-separated words must all match."},
+                    {"name": "category", "in": "query", "required": False, "schema": {"type": "string"},
+                     "description": "Exact category from /api/summary, e.g. 'Sensors'."},
+                    {"name": "location", "in": "query", "required": False, "schema": {"type": "string"},
+                     "description": "Exact storage location, e.g. 'Bag 15'."},
+                    {"name": "has_model", "in": "query", "required": False, "schema": {"type": "string", "enum": ["1", "0"]},
+                     "description": "1 = only items with a 3D model attached, 0 = only items without."},
+                    {"name": "limit", "in": "query", "required": False, "schema": {"type": "integer"},
+                     "description": "Max results. Default 50."},
+                ],
+                "responses": _items_response("Matching items, best match first."),
+            }},
+            "/api/inventory": {"get": {
+                "operationId": "getFullInventory",
+                "summary": "Every item, unfiltered.",
+                "description": "The complete inventory. Large — use /api/query unless you genuinely need everything.",
+                "responses": {"200": {"description": "All items.", "content": {"application/json": {"schema": {
+                    "type": "object", "properties": {"items": {"type": "array", "items": ITEM_SCHEMA}}}}}}},
+            }},
+            "/api/queue": {"get": {
+                "operationId": "getIdentificationQueue",
+                "summary": "Photos and items still awaiting identification.",
+                "description": "Recently photographed parts that do not have a name yet. These are not "
+                               "searchable by name, so check here before concluding something is absent.",
+                "responses": {"200": {"description": "Queued uploads and items being identified.",
+                                      "content": {"application/json": {"schema": {"type": "object", "properties": {
+                                          "count": {"type": "integer"},
+                                          "queue": {"type": "array", "items": {"type": "object"}}}}}}}},
+            }},
+            "/api/wishlist": {
+                "get": {
+                    "operationId": "listPurchaseRequests",
+                    "summary": "Parts requested for purchase.",
+                    "description": "The 'to buy' list. status is requested, ordered or bought.",
+                    "responses": {"200": {"description": "Purchase requests.", "content": {"application/json": {"schema": {
+                        "type": "object", "properties": {"wishlist": {"type": "array", "items": {"type": "object"}}}}}}}},
+                },
+                "post": {
+                    "operationId": "requestPurchase",
+                    "summary": "Ask for a part to be bought.",
+                    "description": "Adds a purchase request. Use this when a project needs a part that "
+                                   "/api/query shows is not in stock. Append-only and unauthenticated: "
+                                   "it never changes the inventory itself, the owner reviews the list. "
+                                   "Search first so you do not request something already on a shelf.",
+                    "requestBody": {"required": True, "content": {"application/json": {"schema": {
+                        "type": "object",
+                        "required": ["part"],
+                        "properties": {
+                            "part": {"type": "string", "description": "What to buy. Be specific: '0.1 ohm 3W shunt resistor', not 'resistor'."},
+                            "quantity": {"type": "integer", "description": "How many. Default 1."},
+                            "project": {"type": "string", "description": "What it is for."},
+                            "type": {"type": "string", "description": "Component category."},
+                            "reason": {"type": "string", "description": "Why it is needed."},
+                            "requested_by": {"type": "string", "description": "Who is asking, e.g. 'ChatGPT'."},
+                            "notes": {"type": "string", "description": "Links, part numbers, alternatives."},
+                        },
+                    }}}},
+                    "responses": {"200": {"description": "Request created.", "content": {"application/json": {"schema": {
+                        "type": "object", "properties": {"ok": {"type": "boolean"}, "id": {"type": "string"},
+                                                         "request": {"type": "object"}}}}}}},
+                },
+            },
+        },
+    }
+
+
 def write_review(item_id, images, reason):
     """Drop a review marker so Claude re-examines newly added photos for an
     existing item and enriches its info. Claude deletes the marker when done."""
@@ -350,6 +500,12 @@ class Handler(BaseHTTPRequestHandler):
             if rel.startswith("vendor" + os.sep) or rel == "vendor":
                 return self._serve_file(os.path.join(PUBLIC, rel))
             return self._send(404, {"error": "not found"})
+        if path == "/openapi.json":
+            # Machine-readable description of the public API, so an LLM tool layer
+            # (ChatGPT Actions, LangChain, n8n) can call it without hand-written glue.
+            proto = self.headers.get("X-Forwarded-Proto") or "http"
+            host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "localhost:8770"
+            return self._send(200, openapi_spec("%s://%s" % (proto, host)))
         if path == "/api/inventory":
             with open(INVENTORY) as f:
                 return self._send(200, f.read(), "application/json")
