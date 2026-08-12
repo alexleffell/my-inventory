@@ -345,6 +345,21 @@ instead of rediscovering it.
    end-to-end (image serves, flag present, flag clears when a location is set —
    then revert the test edit).
 
+### Shop specifics
+
+- **Temu**: orders `bgt_orders.html`, detail `bgt_order_detail.html?parent_order_sn=<id>`,
+  images `img.kwcdn.com`. ~6 months of history. "One-click pay" block at the top
+  of the goods list is part of the order.
+- **Partco** (partco.fi): orders `/tili/tilaukset`, detail
+  `/tili/tilausvahvistus/<order-number>` (needs login — ask the user to log in
+  in the tab, credentials are never entered by Claude). Item lines sit between
+  the "seuraavat tuotteet" and "Palaa sivun" text markers: SKU under each name,
+  `N kpl` quantity. Product images are right on the confirmation page
+  (`partco.fi/images/product/...`), downloadable with a plain browser-UA curl.
+  **Order status "In processing" is unreliable** — delivered orders keep it;
+  judge delivery by whether the order's items are already filed in the
+  inventory, or ask the user.
+
 ### Gotchas (learned the hard way)
 
 - **Cloudflare blocks non-browser user agents** on the public domain with
