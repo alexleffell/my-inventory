@@ -287,6 +287,102 @@ isn't in stock.
   request shows a one-click ✓ Mark bought. An identify routine should do the same:
   flip a matched request to `bought` via `POST /api/wishlist/resolve`.
 
+## Importing purchase orders (Temu or any web shop)
+
+Batch-import ordered items into the inventory BEFORE they arrive, with product
+photos, so arrivals just need a location. Refined over real imports; follow this
+instead of rediscovering it.
+
+### Process
+
+1. **Scrape the orders with the browser extension (Claude for Chrome), not an
+   API.** Temu: orders list at `bgt_orders.html`, per-order detail at
+   `bgt_order_detail.html?parent_order_sn=<order-id>`. `get_page_text` on the
+   list gives order IDs, dates, totals, and delivery status. On a detail page the
+   item lines live between the `Delivery time` and `Latest update:` text markers:
+   run a small `javascript_tool` snippet that slices `document.body.innerText`
+   between those markers instead of dumping the whole page (order pages are 90%
+   recommendations by volume). Each line gives name, unit price, variant, and
+   `×N` quantity. "One-click pay" items appear in a separate block at the top of
+   the goods list; they are part of the order.
+2. **Diff against the live inventory first.** `GET /api/inventory`, match by
+   name/keywords. Skip orders already catalogued (photo-watcher imports usually
+   covered anything already delivered and filed). Import only what's missing.
+3. **Create items via `POST /api/add`** (server assigns `item-<ms>` ids), one
+   item per order line:
+   - `undelivered: true` for anything not yet delivered; omit/false for
+     delivered lines.
+   - **No `location`** — the user files the item into a bag when it arrives,
+     and that edit auto-clears `undelivered` (see the data-model section).
+   - `condition: "New (ordered)"`.
+   - `notes`: pack/variant details, then the order ID + order date + a dated
+     "Added <date> from <shop> order <id>" line. The order ID is the link back
+     to the shop when something goes missing.
+   - Quantity: total pieces for identical parts (`2 packs of 5pcs` → 10);
+     assortment kits count as kits (qty = number of kits).
+   - The same product in two different orders → two items, each noting the
+     other's order ID, so each tracks its own delivery. Merge after arrival if
+     wanted.
+4. **Product images from the shop CDN.** On each order detail page, extract
+   product-image URLs with `javascript_tool`: iterate `document.images`, keep
+   CDN images (Temu: `img.kwcdn.com`) larger than ~50px, climb to the row
+   element containing a price (`/\d+,\d{2}€/`) to pair image↔product, and
+   **strip query strings from URLs before returning them** — the extension
+   redacts strings that look like cookie/query data (`[BLOCKED: ...]`). The
+   first N de-duplicated hits are the N order lines, in on-page order;
+   everything after is recommendations. Then locally: `curl -A <browser UA>`
+   each URL, `sips -Z 800` to downscale, name `temu-<item-digits>.jpg` matching
+   the inventory id.
+5. **Verify the image↔item mapping with ONE contact sheet**, not 37 image
+   reads: PIL-montage all thumbs with index labels into a single <2000px grid,
+   read that once, eyeball it.
+6. **Upload + attach:** rsync the images into `captures/` on the server, then
+   attach each via **`POST /api/ingest` `{id, images:[...]}` — NOT
+   `/api/update`**. `/api/update` writes a `review-*.json` marker per item
+   (queues them all for re-identification); `/api/ingest` does not. These items
+   are already identified — their names came from the order.
+7. **Afterwards:** refresh the local backup mirror, and verify one item
+   end-to-end (image serves, flag present, flag clears when a location is set —
+   then revert the test edit).
+
+### Gotchas (learned the hard way)
+
+- **Cloudflare blocks non-browser user agents** on the public domain with
+  `403 error code: 1010`. Every scripted call to the live server (curl,
+  urllib) needs a browser-like `User-Agent` header. A 403 with that body is
+  Cloudflare, not the app's auth.
+- `/api/login` reads the `Authorization: Basic` **header**, not a JSON body.
+- Clicking "View order details" in the extension can silently not navigate;
+  going straight to the detail URL works.
+- Admin creds: `deploy/admin.env` on the server seeds the account only on
+  first boot; treat it as the source of truth for scripts but confirm with
+  `/api/login` before batch work. Fetch creds to a scratch file, never echo
+  them, delete the file when done.
+
+## Process learning: keeping these instructions current
+
+These sections exist because sessions kept re-solving the same problems. Keep
+the loop going:
+
+- **Capture in the same session.** When an import/batch/deploy step fails and
+  you find the fix (a header, a flag, an endpoint quirk), fold it into the
+  relevant section of this file before the session ends. Evidence first: only
+  write down what you actually verified working.
+- **Edit, don't append.** Update the existing section (Process/Gotchas above,
+  API table, Conventions) rather than adding a new near-duplicate section. If
+  a step in the documented process turned out wrong, fix the step — don't add
+  a footnote contradicting it.
+- **Generalize before writing.** Write the pattern ("shops' order pages bury
+  goods lines in recommendation noise; slice between text markers"), keep
+  shop-specific selectors/URLs as the concrete example under it.
+- **This repo is public.** No credentials, hostnames, IPs, order IDs, or
+  personal data in this file — machine-specific values live in the user's
+  private global config and the environment (`VPS_HOST` etc.). Placeholders
+  like `<order-id>` are fine.
+- **Where things go:** project-invariant process → this file. User-specific
+  habits (backup cadence, "commit straight to main") → the user's private
+  memory/config, not here. One fact, one home; link rather than duplicate.
+
 ## Conventions
 
 - **Name is optional.** This is photo-driven: an item can be saved with photos and
