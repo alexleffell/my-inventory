@@ -211,9 +211,17 @@ summary/description.
   "condition": "New (sealed bag)",
   "notes": "SKU #106611. ...",
   "images": ["cap-<ms>.png", ...], // one or more photos; omitted/empty for manual adds
-  "models": ["model-<ms>-holder.stl", ...]  // optional 3D models (files in models/)
+  "models": ["model-<ms>-holder.stl", ...],  // optional 3D models (files in models/)
+  "undelivered": true          // optional: ordered but not delivered yet (see below)
 }
 ```
+
+**Ordered-but-not-delivered items.** Items added from a purchase order before the
+package arrives carry `"undelivered": true` and (deliberately) no `location`.
+The dashboard shows a "🚚 not delivered" flag on the card and detail modal.
+`POST /api/update` clears the flag automatically when an update sets a non-empty
+`location` (the item arrived and got filed) — unless the same payload sets
+`undelivered` explicitly. Notes should carry the order ID and order date.
 
 ## 3D models on items
 

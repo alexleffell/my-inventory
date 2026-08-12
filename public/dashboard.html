@@ -215,6 +215,7 @@
   .flag { position: absolute; top: 8px; left: 8px; background: #322606ee; color: var(--warnfg); border: 1px solid var(--warnline);
           font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: var(--r-tag);
           text-transform: uppercase; letter-spacing: .05em; backdrop-filter: blur(4px); }
+  .flag + .flag { top: 34px; }
   .photo-count { position: absolute; top: 8px; right: 8px; background: #0d0b09d6; border: 1px solid var(--line2);
           color: var(--text); font-family: var(--mono); font-size: 10.5px; padding: 2px 7px; border-radius: var(--r-tag); backdrop-filter: blur(4px); }
 
@@ -921,6 +922,7 @@ function render() {
         ${imgs.length ? `<img src="/captures/${esc(imgs[0])}" alt="">` : `<div class="nothumb">📦</div>`}
         ${imgs.length > 1 ? `<span class="photo-count">📷 ${imgs.length}</span>` : ``}
         ${(it.models && it.models.length) ? `<button type="button" class="model-badge" data-act="view3d" title="View 3D model"><span class="ico" aria-hidden="true">🧊</span> 3D${it.models.length > 1 ? ' · ' + it.models.length : ''}</button>` : ``}
+        ${it.undelivered ? `<span class="flag" title="Ordered, not delivered yet — set a location when it arrives">🚚 not delivered</span>` : ``}
         ${flagged ? `<span class="flag" title="Has unconfirmed details">check</span>` : ``}
         ${isAdmin ? `<div class="qty-badge">
           <button data-act="dec" aria-label="Decrease quantity">−</button>
@@ -1152,6 +1154,7 @@ function renderDetail() {
         ${it.category ? `<span class="chip">${esc(it.category)}</span>` : ''}
         ${it.location ? `<span class="chip loc">${esc(it.location)}</span>` : ''}
         ${it.condition ? `<span class="chip cond">${esc(it.condition)}</span>` : ''}
+        ${it.undelivered ? `<span class="chip warn" title="Ordered, not delivered yet — set a location when it arrives">🚚 not delivered</span>` : ''}
         ${flagged ? `<span class="chip warn" title="Has unconfirmed details">check</span>` : ''}
       </div>
       <div class="d-field"><label>Quantity</label>

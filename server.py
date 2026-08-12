@@ -874,6 +874,11 @@ class Handler(BaseHTTPRequestHandler):
                     for k, v in payload.items():
                         if k != "id":
                             it[k] = v
+                    # An undelivered (ordered) item that gets a location has
+                    # arrived: clear the flag unless the edit sets it explicitly.
+                    if (it.get("undelivered") and "undelivered" not in payload
+                            and str(payload.get("location") or "").strip()):
+                        it["undelivered"] = False
                     save_inv(inv)
                     new_imgs = [x for x in it.get("images", []) if x not in old_imgs]
                     if new_imgs:
