@@ -297,14 +297,22 @@ instead of rediscovering it.
 
 1. **Scrape the orders with the browser extension (Claude for Chrome), not an
    API.** Temu: orders list at `bgt_orders.html`, per-order detail at
-   `bgt_order_detail.html?parent_order_sn=<order-id>`. `get_page_text` on the
-   list gives order IDs, dates, totals, and delivery status. On a detail page the
-   item lines live between the `Delivery time` and `Latest update:` text markers:
+   `bgt_order_detail.html?parent_order_sn=<order-id>`. Both pages render the
+   order rows lazily: right after `navigate` the text holds only the nav and
+   "Buy this again" recommendations, so wait ~3-4s (and scroll a few hundred px
+   on the list) before reading, or you will conclude there are no orders. On the
+   list, `Order Time:` / `Order ID:` label pairs give the order IDs and dates;
+   the "N items" figure is total PIECES, not lines. On a detail page the item
+   lines live between the `Delivery time` and `Payment details` text markers:
    run a small `javascript_tool` snippet that slices `document.body.innerText`
    between those markers instead of dumping the whole page (order pages are 90%
-   recommendations by volume). Each line gives name, unit price, variant, and
-   `×N` quantity. "One-click pay" items appear in a separate block at the top of
-   the goods list; they are part of the order.
+   recommendations by volume). Parse lines by finding each `\d+,\d{2}€` price:
+   the preceding line is the name, the next is the variant, and the following
+   `×N` is the quantity. Return short (~70 char) names, and page through the
+   result in slices; a full dump of a 17-line order hits the tool output cap.
+   "One-click pay" items appear in a separate block at the top of the goods
+   list; they are part of the order. A "Pre-order" badge on the LIST page is not
+   a per-line delivery state, so check the detail page before trusting it.
 2. **Diff against the live inventory first.** `GET /api/inventory`, match by
    name/keywords. Skip orders already catalogued (photo-watcher imports usually
    covered anything already delivered and filed). Import only what's missing.
@@ -341,7 +349,18 @@ instead of rediscovering it.
    `/api/update`**. `/api/update` writes a `review-*.json` marker per item
    (queues them all for re-identification); `/api/ingest` does not. These items
    are already identified — their names came from the order.
-7. **Afterwards:** refresh the local backup mirror, and verify one item
+7. **Re-syncing an order already imported.** A later "sync the orders" pass is
+   mostly a delivery-status pass, not an import: diff by pulling the order IDs
+   out of each item's `notes` (`PO-...`), compare the per-order item count to
+   the detail page's line count, and import only the gap. For every order whose
+   detail page now shows `Delivered on <date>`, clear the flag with
+   `POST /api/update {id, undelivered: false, notes: <existing + dated line>}`
+   — passing `undelivered` explicitly is required, since the automatic clear
+   only fires when the same payload sets a `location`. Items stay unfiled
+   (location empty) until the user puts them in a bag; that is the correct
+   state, not a missing step. Non-component lines (a tool, a storage cabinet)
+   are a judgement call: import tools, skip furniture, and say which you skipped.
+8. **Afterwards:** refresh the local backup mirror, and verify one item
    end-to-end (image serves, flag present, flag clears when a location is set —
    then revert the test edit).
 
