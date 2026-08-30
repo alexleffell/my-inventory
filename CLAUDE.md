@@ -339,8 +339,15 @@ instead of rediscovering it.
    redacts strings that look like cookie/query data (`[BLOCKED: ...]`). The
    first N de-duplicated hits are the N order lines, in on-page order;
    everything after is recommendations. Then locally: `curl -A <browser UA>`
-   each URL, `sips -Z 800` to downscale, name `temu-<item-digits>.jpg` matching
-   the inventory id.
+   each URL, `sips -Z 800` to downscale, name `<shop>-<item-digits>-<n>.jpg`
+   matching the inventory id.
+   **If the order page carries no product images** (common on B2C shop
+   platforms like Magento), go via the shop's own catalogue instead: search
+   each SKU, open the product page, and take its gallery. Do the whole loop
+   with `javascript_tool` `fetch()` from the already-authenticated tab rather
+   than navigating once per product — same-origin fetch carries the session
+   cookies, and one call can walk all N SKUs. Return only the URLs, in slices,
+   or the tool output cap truncates the result mid-JSON.
 5. **Verify the image↔item mapping with ONE contact sheet**, not 37 image
    reads: PIL-montage all thumbs with index labels into a single <2000px grid,
    read that once, eyeball it.
@@ -378,6 +385,25 @@ instead of rediscovering it.
   **Order status "In processing" is unreliable** — delivered orders keep it;
   judge delivery by whether the order's items are already filed in the
   inventory, or ask the user.
+- **Uraltone** (uraltone.com, Magento): orders `/sales/order/history/`, detail
+  `/sales/order/view/order_id/<internal-id>/` (needs login; the `order_id` in
+  the URL is Magento's internal id, not the printed `ORDER # 0000xxxxx`).
+  `get_page_text` on the detail page returns the whole goods table in English
+  with no lazy-render wait: name, product number (the SKU), unit price,
+  `Ordered N` / `Posted N`, subtotal. Header carries the order date and
+  status; `COMPLETE` + a "Pick up from store" delivery method means delivered,
+  so import without the `undelivered` flag.
+  **The order page has no product images.** Get them from the catalogue:
+  `fetch('/catalogsearch/result/?q=<SKU>')` returns the product page as the
+  first `li.product-item`; on that product page the full-size gallery URLs are
+  in the inline JSON as `"full":"<url>"` (de-duplicate, and unescape `\/`).
+  `meta[property="og:image"]` gives just the main shot. Product descriptions
+  are empty on most parts — the `#product-attribute-specs-table` holds only
+  `Tuotekoodi` (SKU) and `Barcode`, so write notes from the order line's
+  English name plus the SKU/barcode, don't hunt for a spec sheet. Images
+  download with a plain browser-UA `curl`. Product URL slugs are Finnish and
+  sometimes disagree with the SKU (a `x10` SKU under a `x20kpl` slug); trust
+  the SKU and flag the discrepancy to the user.
 
 ### Gotchas (learned the hard way)
 
@@ -392,6 +418,12 @@ instead of rediscovering it.
   first boot; treat it as the source of truth for scripts but confirm with
   `/api/login` before batch work. Fetch creds to a scratch file, never echo
   them, delete the file when done.
+- **Shop galleries mix marketing banners with product shots.** A tool or
+  gadget listing often leads with a captioned lifestyle render ("Tiltable
+  Angle", arrows, text overlay). Those are not the part. Order the `images`
+  array with the clean product shot first (the card thumbnail) and the banners
+  after, per the part-first convention. The contact sheet is what tells you
+  which is which — check it before attaching, not after.
 
 ## Process learning: keeping these instructions current
 
