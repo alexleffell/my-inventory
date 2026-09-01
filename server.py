@@ -83,30 +83,34 @@ def load_inv():
         return json.load(f)
 
 
-def query_items(items, search, category, location, has_model, limit):
-    fields = ("id", "name", "category", "quantity", "location", "condition", "notes", "images", "models")
-    terms = (search or "").lower().split()
-    category, location = (category or "").lower(), (location or "").lower()
-    matches = []
-    for it in items:
-        models = it.get("models") or []
-        if category and category != (it.get("category", "") or "").lower():
-            continue
-        if location and location != (it.get("location", "") or "").lower():
-            continue
-        if has_model is not None and bool(models) != has_model:
-            continue
-        name = str(it.get("name", "") or "").lower()
-        catloc = " ".join(str(it.get(k, "") or "") for k in ("category", "location")).lower()
-        detail = " ".join([str(it.get("notes", "") or "")] + [str(model) for model in models]).lower()
-        if terms and not all(term in " ".join((name, catloc, detail)) for term in terms):
-            continue
-        score = sum(3 * (term in name) + 2 * (term in catloc) + (term in detail) for term in terms)
-        matches.append((score, it))
-    if terms:
-        matches = sorted(matches, key=lambda match: -match[0])
-    res = [{k: it.get(k) for k in fields} for score, it in matches]
-    return res[:limit] if limit > 0 else res
+SUMMARY_FIELDS = ("id", "name", "category", "quantity", "location")
+
+
+def item_summary(it):
+    """One compact row per item.
+
+    The agent-facing contract is "pull every summary in one call, then ask for
+    the details you actually need", so a row carries only what you need to
+    decide whether an item is interesting: identity, how many, where it lives,
+    whether it has photos/models. Notes, condition and image filenames come
+    from the full item.
+    """
+    row = {k: it.get(k) for k in SUMMARY_FIELDS}
+    row["images"] = len(it.get("images") or [])
+    models = it.get("models") or []
+    if models:
+        row["models"] = list(models)
+    if it.get("undelivered"):
+        row["undelivered"] = True
+    return row
+
+
+def items_by_ids(items, ids):
+    """Full items for the given ids, in the order asked for, plus the misses."""
+    by_id = {it.get("id"): it for it in items}
+    found = [by_id[i] for i in ids if i in by_id]
+    missing = [i for i in ids if i not in by_id]
+    return found, missing
 
 
 def save_inv(inv):
@@ -293,10 +297,13 @@ def openapi_spec(base_url):
             "version": "1.0.0",
             "description": (
                 "A photo-driven inventory of small parts (electronic components, hardware, "
-                "craft supplies) stored in numbered bags and bins. Read endpoints are public. "
-                "Use /api/summary first to see what categories and locations exist, then "
-                "/api/query to search. If a needed part is not in stock, POST /api/wishlist "
-                "to ask for it to be bought."
+                "craft supplies) stored in numbered bags and bins. Read endpoints are public.\n\n"
+                "There is no search endpoint on purpose. The inventory is a few hundred items, "
+                "so the reliable way to answer any question about it is: GET /api/items once "
+                "(one compact row per item, the entire inventory), then pick the ids you care "
+                "about and GET /api/items?ids=... for their full records. Do not guess whether "
+                "a part exists from a keyword match; read the list. If a needed part really is "
+                "not there, POST /api/wishlist to ask for it to be bought."
             ),
         },
         "servers": [{"url": base_url}],
@@ -305,8 +312,9 @@ def openapi_spec(base_url):
                 "operationId": "getSummary",
                 "summary": "Overview of the whole inventory.",
                 "description": "Item/unit totals plus a breakdown by category and by storage location, "
-                               "and how many purchase requests are open. Small response — call this "
-                               "before searching to learn the real category and location names.",
+                               "and how many purchase requests are open. Tiny response — useful for "
+                               "'what do I have?' questions; for anything item-specific go straight "
+                               "to /api/items.",
                 "responses": {"200": {"description": "Totals and breakdowns.", "content": {"application/json": {"schema": {
                     "type": "object",
                     "properties": {
@@ -321,38 +329,41 @@ def openapi_spec(base_url):
                     },
                 }}}}},
             }},
-            "/api/query": {"get": {
-                "operationId": "searchInventory",
-                "summary": "Search and filter the inventory.",
-                "description": "Ranked full-text search over name, category, location, notes and model "
-                               "filenames. Multiple search words are ANDed. Prefer this over fetching "
-                               "the whole inventory. An empty result means the part is not in stock.",
+            "/api/items": {"get": {
+                "operationId": "listItems",
+                "summary": "Every item as a compact summary, or full records for specific ids.",
+                "description": "Call with no parameters to get one short row per item (id, name, "
+                               "category, quantity, location, photo count, attached 3D models) for "
+                               "the WHOLE inventory in a single response. That list is the ground "
+                               "truth: scan it yourself instead of searching. Then call again with "
+                               "ids= to get the complete records (notes, SKUs, specs, photo "
+                               "filenames) for the handful of items you actually need.",
                 "parameters": [
-                    {"name": "search", "in": "query", "required": False, "schema": {"type": "string"},
-                     "description": "Free text, e.g. 'esp32' or 'shunt resistor'. Space-separated words must all match."},
-                    {"name": "category", "in": "query", "required": False, "schema": {"type": "string"},
-                     "description": "Exact category from /api/summary, e.g. 'Sensors'."},
-                    {"name": "location", "in": "query", "required": False, "schema": {"type": "string"},
-                     "description": "Exact storage location, e.g. 'Bag 15'."},
-                    {"name": "has_model", "in": "query", "required": False, "schema": {"type": "string", "enum": ["1", "0"]},
-                     "description": "1 = only items with a 3D model attached, 0 = only items without."},
-                    {"name": "limit", "in": "query", "required": False, "schema": {"type": "integer"},
-                     "description": "Max results. Default 50."},
+                    {"name": "ids", "in": "query", "required": False, "schema": {"type": "string"},
+                     "description": "Comma-separated item ids from a previous call. Returns those "
+                                    "items in full, in the order given, plus a 'missing' list for "
+                                    "ids that do not exist."},
                 ],
-                "responses": _items_response("Matching items, best match first."),
+                "responses": {"200": {"description": "Summary rows, or full items when ids= is given.",
+                                      "content": {"application/json": {"schema": {
+                                          "type": "object",
+                                          "properties": {"count": {"type": "integer"},
+                                                         "items": {"type": "array", "items": ITEM_SCHEMA},
+                                                         "missing": {"type": "array", "items": {"type": "string"}}},
+                                      }}}}},
             }},
             "/api/inventory": {"get": {
                 "operationId": "getFullInventory",
                 "summary": "Every item, unfiltered.",
-                "description": "The complete inventory. Large — use /api/query unless you genuinely need everything.",
+                "description": "Every item with every field. Use it when you need the full detail of the whole inventory at once; otherwise /api/items is the cheaper first call.",
                 "responses": {"200": {"description": "All items.", "content": {"application/json": {"schema": {
                     "type": "object", "properties": {"items": {"type": "array", "items": ITEM_SCHEMA}}}}}}},
             }},
             "/api/queue": {"get": {
                 "operationId": "getIdentificationQueue",
                 "summary": "Photos and items still awaiting identification.",
-                "description": "Recently photographed parts that do not have a name yet. These are not "
-                               "searchable by name, so check here before concluding something is absent.",
+                "description": "Recently photographed parts that do not have a name yet. They show up in "
+                               "/api/items with an empty name, so check here before concluding something is absent.",
                 "responses": {"200": {"description": "Queued uploads and items being identified.",
                                       "content": {"application/json": {"schema": {"type": "object", "properties": {
                                           "count": {"type": "integer"},
@@ -370,9 +381,9 @@ def openapi_spec(base_url):
                     "operationId": "requestPurchase",
                     "summary": "Ask for a part to be bought.",
                     "description": "Adds a purchase request. Use this when a project needs a part that "
-                                   "/api/query shows is not in stock. Append-only and unauthenticated: "
+                                   "/api/items shows is not in stock. Append-only and unauthenticated: "
                                    "it never changes the inventory itself, the owner reviews the list. "
-                                   "Search first so you do not request something already on a shelf.",
+                                   "Read /api/items first so you do not request something already on a shelf.",
                     "requestBody": {"required": True, "content": {"application/json": {"schema": {
                         "type": "object",
                         "required": ["part"],
@@ -583,19 +594,18 @@ class Handler(BaseHTTPRequestHandler):
                               "quantity": it.get("quantity"), "location": it.get("location"),
                               "status": "identifying"})
             return self._send(200, {"count": len(q), "queue": q})
-        if path == "/api/query":
-            # Public search/filter. Params: search|q, category, location, has_model, limit.
+        if path == "/api/items":
+            # Public. No args: one compact summary row per item (the whole
+            # inventory in one small response). ?ids=a,b,c: the full records for
+            # those ids. Everything in full is /api/inventory.
             qs = parse_qs(urlparse(self.path).query)
-            g = lambda k: (qs.get(k, [""])[0] or "").strip()
-            search = g("search") or g("q")
-            cat, loc, model = g("category"), g("location"), g("has_model").lower()
-            has_model = True if model in ("1", "true", "yes") else False if model in ("0", "false", "no") else None
-            try:
-                limit = int(g("limit") or 0)
-            except ValueError:
-                limit = 0
-            res = query_items(load_inv().get("items", []), search, cat, loc, has_model, limit)
-            return self._send(200, {"count": len(res), "items": res})
+            ids = [x.strip() for x in (qs.get("ids", [""])[0] or "").split(",") if x.strip()]
+            items = load_inv().get("items", [])
+            if ids:
+                found, missing = items_by_ids(items, ids)
+                return self._send(200, {"count": len(found), "items": found, "missing": missing})
+            return self._send(200, {"count": len(items),
+                                    "items": [item_summary(it) for it in items]})
         if path.startswith("/captures/"):
             name = os.path.basename(path)
             return self._serve_file(os.path.join(CAPTURES, name))

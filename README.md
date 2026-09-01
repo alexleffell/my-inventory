@@ -133,8 +133,15 @@ and request purchases:
 INVENTORY_URL=http://localhost:8770 python3 mcp_server.py
 ```
 
-Tools: `search_inventory`, `inventory_summary`, `list_all_items`, `get_item_images`,
-`list_wishlist`, and `request_purchase` (the one public write).
+Tools: `list_all_items`, `get_items`, `inventory_summary`, `get_item_images`,
+`list_wishlist`, `attach_item_model` / `get_item_model`, and `request_purchase`
+(the one public write).
+
+There is deliberately **no search tool**. A few hundred items fit in one response,
+so an agent calls `list_all_items` once (compact rows: id, name, category,
+quantity, location, photo count, models) and picks ids from that list, then calls
+`get_items` for the full records. Keyword search made agents conclude a part was
+missing when it was there under another name.
 
 ## Data and backups
 

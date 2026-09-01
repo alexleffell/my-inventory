@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""MCP server exposing the inventory for read/query by an LLM agent.
+"""MCP server exposing the inventory to an LLM agent.
+
+The tool set is deliberately search-free: `list_all_items` returns EVERY item as
+a compact row in one call, and `get_items` returns the full records for the ids
+the agent picked out of that list. Keyword search used to make agents declare a
+part missing when it was in stock under a different name, so it was removed —
+see "Agent access contract" in CLAUDE.md before adding one back.
 
 Pure standard library — runs on the system python3 (no uv, no pip). Mostly
 read-only: it calls the inventory's public HTTP API. Speaks the MCP stdio
@@ -115,28 +121,36 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
-        "name": "search_inventory",
-        "description": "Search/filter the inventory. 'query' is free text matched across name, category, location, notes, and model filenames; 'category'/'location' restrict to an exact match; 'limit' caps results. Results include each item's 'models' field (attached 3D CAD/print files). 'has_model' filters to items that do (true) or don't (false) have models attached.",
+        "name": "list_all_items",
+        "description": (
+            "THE first call for any question about what is in stock. Returns EVERY item in the "
+            "inventory as a compact row (id, name, category, quantity, location, photo count, "
+            "attached 3D model files) in one response — a few hundred rows. There is no search "
+            "tool on purpose: read the whole list and pick what you need yourself, rather than "
+            "guessing keywords. Then call get_items with the ids you care about for full details "
+            "(notes, SKUs, specs). Pass full=true to get every field of every item at once."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "free-text search"},
-                "category": {"type": "string", "description": "exact category, e.g. Sensors"},
-                "location": {"type": "string", "description": "exact bag/bin, e.g. Bag 6"},
-                "limit": {"type": "integer", "description": "max results (default 50)"},
-                "has_model": {"type": "boolean", "description": "if true, only items with 3D models; if false, only items without"},
+                "full": {"type": "boolean", "description": "true = every field of every item (large); default false = compact rows"},
             },
         },
     },
     {
-        "name": "list_all_items",
-        "description": "Return the full inventory (every item with all fields).",
-        "inputSchema": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "list_item_models",
-        "description": "List every inventory item that has at least one 3D model attached (STL/3MF/OBJ/GLB/GLTF/STEP/SCAD). Returns id, name, category, location, and each model's filename plus public download URL.",
-        "inputSchema": {"type": "object", "properties": {}},
+        "name": "get_items",
+        "description": (
+            "Full records (notes, SKUs, specs, condition, photo filenames, 3D models) for specific "
+            "items, by id. Get the ids from list_all_items. Ask for several at once."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ids": {"type": "array", "items": {"type": "string"},
+                        "description": "item ids, e.g. ['cap-1717000000000', 'item-1718000000000']"},
+            },
+            "required": ["ids"],
+        },
     },
     {
         "name": "list_wishlist",
@@ -145,15 +159,18 @@ TOOLS = [
     },
     {
         "name": "get_item_images",
-        "description": "Return the actual photos of inventory items so you can SEE the parts (not just their names). Identify items by 'id' (exact) or by 'query' (free-text matched across name/category/location/notes); 'category'/'location' narrow a query. Returns every image of each matched item, part-first. Use after search_inventory/list_all_items when you need to visually inspect a component.",
+        "description": (
+            "Return the actual photos of inventory items so you can SEE the parts, not just their "
+            "names. Give the item ids (from list_all_items). The first photo of an item shows the "
+            "physical part; later ones are packaging/labels. Use this when a name alone is not "
+            "enough to tell whether an item is the part you need."
+        ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "id": {"type": "string", "description": "exact item id, e.g. cap-1717000000000"},
-                "query": {"type": "string", "description": "free-text search to pick item(s)"},
-                "category": {"type": "string", "description": "exact category to narrow a query"},
-                "location": {"type": "string", "description": "exact bag/bin to narrow a query"},
-                "max_items": {"type": "integer", "description": "max matched items (default 5)"},
+                "ids": {"type": "array", "items": {"type": "string"},
+                        "description": "item ids whose photos to return"},
+                "id": {"type": "string", "description": "a single item id (shorthand for ids)"},
                 "max_images": {"type": "integer", "description": "max images returned total (default 20)"},
                 "max_dimension": {"type": "integer", "description": "long-edge pixel cap per image (default 1024)"},
             },
@@ -204,34 +221,22 @@ TOOLS = [
 
 
 def _item_images(args):
-    """Resolve item(s) and return interleaved text + image content blocks."""
-    iid = (args.get("id") or "").strip()
-    query = (args.get("query") or "").strip()
-    max_items = int(args.get("max_items") or 5)
+    """Resolve item(s) by id and return interleaved text + image content blocks."""
+    ids = [str(x).strip() for x in (args.get("ids") or []) if str(x).strip()]
+    single = (args.get("id") or "").strip()
+    if single and single not in ids:
+        ids.append(single)
+    if not ids:
+        raise ValueError("provide 'ids' (item ids from list_all_items)")
     max_images = int(args.get("max_images") or 20)
     max_dim = int(args.get("max_dimension") or 1024)
 
-    if iid:
-        items = [it for it in _get("/api/inventory").get("items", [])
-                 if it.get("id") == iid]
-        if not items:
-            raise ValueError("no item with id %r" % iid)
-    elif query or args.get("category") or args.get("location"):
-        qs = urlencode({
-            "search": query,
-            "category": args.get("category", "") or "",
-            "location": args.get("location", "") or "",
-            "limit": max_items,
-        })
-        items = _get("/api/query?" + qs).get("items", [])
-        if not items:
-            raise ValueError("no items matched the query")
-    else:
-        raise ValueError("provide an 'id' or a 'query'/category/location to pick items")
+    found, missing = _items_by_ids(ids)
+    if not found:
+        raise ValueError("no item with id %s" % ", ".join(missing))
 
-    items = items[:max_items]
     content, sent, skipped = [], 0, 0
-    for it in items:
+    for it in found:
         imgs = it.get("images") or []
         label = "%s — %s (id %s, %s, qty %s) — %d image(s)" % (
             it.get("name") or "⏳ unidentified", it.get("category") or "?",
@@ -246,6 +251,8 @@ def _item_images(args):
                 sent += 1
             except Exception as e:
                 content.append({"type": "text", "text": "  (failed to load %s: %s)" % (fn, e)})
+    if missing:
+        content.append({"type": "text", "text": "no such item id: %s" % ", ".join(missing)})
     if skipped:
         content.append({"type": "text",
                         "text": "… %d more image(s) omitted (max_images=%d). Raise max_images to see them."
@@ -302,39 +309,32 @@ def _get_model(args):
     return {"ok": True, "models": saved}
 
 
+def _items_by_ids(ids):
+    """Full item records for ids, in the order asked for, plus the ids that missed."""
+    data = _get("/api/items?" + urlencode({"ids": ",".join(ids)}))
+    return data.get("items", []), data.get("missing", [])
+
+
 def call_tool(name, args):
     if name == "inventory_summary":
         return _get("/api/summary")
-    if name == "search_inventory":
-        params = {
-            "search": args.get("query", "") or "",
-            "category": args.get("category", "") or "",
-            "location": args.get("location", "") or "",
-            "limit": args.get("limit", 50) or 50,
-        }
-        if "has_model" in args:
-            params["has_model"] = "1" if args.get("has_model") else "0"
-        return _get("/api/query?" + urlencode(params))
     if name == "list_all_items":
-        return _get("/api/inventory")
-    if name == "list_item_models":
-        items = _get("/api/inventory").get("items", [])
-        out = []
-        for it in items:
-            models = it.get("models") or []
-            if not isinstance(models, list) or not models:
-                continue
-            out.append({
-                "id": it.get("id"),
-                "name": it.get("name"),
-                "category": it.get("category"),
-                "location": it.get("location"),
-                "models": [
-                    {"file": fn, "url": BASE + "/models/" + fn}
-                    for fn in models
-                ],
-            })
-        return {"items": out, "count": len(out)}
+        if args.get("full"):
+            items = _get("/api/inventory").get("items", [])
+            return {"count": len(items), "items": items}
+        return _get("/api/items")
+    if name == "get_items":
+        ids = [str(x).strip() for x in (args.get("ids") or []) if str(x).strip()]
+        single = (args.get("id") or "").strip() if args.get("id") else ""
+        if single and single not in ids:
+            ids.append(single)
+        if not ids:
+            raise ValueError("ids is required — get them from list_all_items")
+        found, missing = _items_by_ids(ids)
+        out = {"count": len(found), "items": found}
+        if missing:
+            out["missing"] = missing
+        return out
     if name == "get_item_images":
         return _item_images(args)
     if name == "list_wishlist":
