@@ -125,7 +125,9 @@ TOOLS = [
         "description": (
             "THE first call for any question about what is in stock. Returns EVERY item in the "
             "inventory as a compact row (id, name, category, quantity, location, photo count, "
-            "attached 3D model files) in one response — a few hundred rows. There is no search "
+            "attached 3D model files, plus `stock` when the item is split across several "
+            "bags/shelves, in which case quantity is the total and location the primary place) "
+            "in one response, a few hundred rows. There is no search "
             "tool on purpose: read the whole list and pick what you need yourself, rather than "
             "guessing keywords. Then call get_items with the ids you care about for full details "
             "(notes, SKUs, specs). Pass full=true to get every field of every item at once."
@@ -220,6 +222,15 @@ TOOLS = [
 ]
 
 
+def _where(it):
+    """Where an item lives, as one line. Split items list every stash."""
+    stock = it.get("stock")
+    if isinstance(stock, list) and len(stock) > 1:
+        return ", ".join("%s x%s" % (r.get("location") or "?", r.get("quantity", "?"))
+                         for r in stock)
+    return it.get("location") or "?"
+
+
 def _item_images(args):
     """Resolve item(s) by id and return interleaved text + image content blocks."""
     ids = [str(x).strip() for x in (args.get("ids") or []) if str(x).strip()]
@@ -240,7 +251,7 @@ def _item_images(args):
         imgs = it.get("images") or []
         label = "%s — %s (id %s, %s, qty %s) — %d image(s)" % (
             it.get("name") or "⏳ unidentified", it.get("category") or "?",
-            it.get("id"), it.get("location") or "?", it.get("quantity", "?"), len(imgs))
+            it.get("id"), _where(it), it.get("quantity", "?"), len(imgs))
         content.append({"type": "text", "text": label})
         for fn in imgs:
             if sent >= max_images:

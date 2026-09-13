@@ -86,6 +86,78 @@ def load_inv():
 SUMMARY_FIELDS = ("id", "name", "category", "quantity", "location")
 
 
+def normalize_stock(item):
+    """Keep an item's multi-location `stock` list and its top-level
+    `location`/`quantity` consistent.
+
+    `stock` is `[{"location": "Bag 1", "quantity": 5}, ...]` and is the source
+    of truth whenever the item is split across two or more places. `quantity`
+    then holds the TOTAL and `location` mirrors the first entry, so every
+    existing reader (cards, storage map, /api/summary, agents) keeps working
+    on an item exactly as it did when items lived in one bag.
+
+    An item in a single place carries no `stock` at all: one location is just
+    `location` + `quantity`, same as before.
+    """
+    stock = item.get("stock")
+    if not isinstance(stock, list):
+        if "stock" in item:
+            item.pop("stock", None)
+        return item
+    clean = []
+    for row in stock:
+        if not isinstance(row, dict):
+            continue
+        loc = str(row.get("location") or "").strip()
+        try:
+            qty = int(row.get("quantity") or 0)
+        except (TypeError, ValueError):
+            qty = 0
+        if not loc and qty <= 0:
+            continue
+        clean.append({"location": loc, "quantity": max(0, qty)})
+    if len(clean) < 2:
+        item.pop("stock", None)
+        if clean:
+            item["location"] = clean[0]["location"]
+            item["quantity"] = clean[0]["quantity"]
+        return item
+    item["stock"] = clean
+    item["quantity"] = sum(r["quantity"] for r in clean)
+    item["location"] = clean[0]["location"]
+    return item
+
+
+def apply_scalar_stock_edit(item, payload):
+    """Land a plain `quantity`/`location` edit on a split item's FIRST stash.
+
+    The card's +/- buttons and any agent that does not know about `stock` send
+    a single total. Without this the split rows and the total would disagree.
+    """
+    stock = item.get("stock")
+    if "stock" in payload or not isinstance(stock, list) or len(stock) < 2:
+        return
+    if "location" in payload:
+        stock[0]["location"] = str(payload.get("location") or "").strip()
+    if "quantity" in payload:
+        try:
+            total = max(0, int(payload.get("quantity") or 0))
+        except (TypeError, ValueError):
+            return
+        rest = sum(int(r.get("quantity") or 0) for r in stock[1:])
+        stock[0]["quantity"] = max(0, total - rest)
+
+
+def stock_rows(item):
+    """Every (location, quantity) stash of an item, split or not."""
+    stock = item.get("stock")
+    if isinstance(stock, list) and stock:
+        return [{"location": r.get("location") or "", "quantity": int(r.get("quantity") or 0)}
+                for r in stock if isinstance(r, dict)]
+    return [{"location": item.get("location") or "", "quantity": int(item.get("quantity") or 0)}]
+
+
+
 def item_summary(it):
     """One compact row per item.
 
@@ -96,6 +168,10 @@ def item_summary(it):
     from the full item.
     """
     row = {k: it.get(k) for k in SUMMARY_FIELDS}
+    if it.get("stock"):
+        # Split across several places: `location`/`quantity` stay the primary
+        # stash and the total, `stock` says where the rest of the units are.
+        row["stock"] = [dict(r) for r in it["stock"]]
     row["images"] = len(it.get("images") or [])
     models = it.get("models") or []
     if models:
@@ -265,8 +341,12 @@ ITEM_SCHEMA = {
         "id": {"type": "string", "description": "Stable item id."},
         "name": {"type": "string", "description": "Part name. Empty while an item is still being identified from its photos."},
         "category": {"type": "string", "description": "e.g. Sensors, Power, Resistors, Modules."},
-        "quantity": {"type": "integer", "description": "Units in stock."},
-        "location": {"type": "string", "description": "Physical storage, formatted '<Bag|Bin> <number>' (e.g. 'Bag 15')."},
+        "quantity": {"type": "integer", "description": "Total units in stock, across every location."},
+        "location": {"type": "string", "description": "Physical storage, formatted '<Bag|Bin> <number>' (e.g. 'Bag 15'). When the item is split across places this is the first/primary one."},
+        "stock": {"type": "array", "description": "Present only when the item is split across two or more places: where the units actually are. Absent means everything sits in 'location'.",
+                  "items": {"type": "object", "properties": {
+                      "location": {"type": "string"},
+                      "quantity": {"type": "integer"}}}},
         "condition": {"type": "string"},
         "notes": {"type": "string", "description": "Free text: SKUs, specs, provenance. The word 'unconfirmed' means the value is a guess."},
         "images": {"type": "array", "items": {"type": "string"},
@@ -544,12 +624,13 @@ class Handler(BaseHTTPRequestHandler):
             items = load_inv().get("items", [])
             cats, locs, units = {}, {}, 0
             for it in items:
-                q = int(it.get("quantity") or 0)
-                units += q
+                units += int(it.get("quantity") or 0)
                 c = it.get("category") or "Uncategorized"
-                l = it.get("location") or "Unfiled"
                 cats[c] = cats.get(c, 0) + 1
-                locs[l] = locs.get(l, 0) + 1
+                # A split item counts once in every place it is stored.
+                for row in stock_rows(it):
+                    l = row["location"] or "Unfiled"
+                    locs[l] = locs.get(l, 0) + 1
             wl = load_wishlist().get("wishlist", [])
             return self._send(200, {
                 "total_items": len(items),
@@ -853,11 +934,13 @@ class Handler(BaseHTTPRequestHandler):
             items = inv.setdefault("items", [])
             for idx, it in enumerate(items):
                 if it.get("id") == item["id"]:
-                    items[idx] = {**it, **item}
+                    merged = {**it, **item}
+                    apply_scalar_stock_edit(merged, item)
+                    items[idx] = normalize_stock(merged)
                     break
             else:
                 item.setdefault("quantity", 1)
-                items.append(item)
+                items.append(normalize_stock(item))
             save_inv(inv)
             return self._send(200, {"ok": True, "id": item["id"]})
 
@@ -867,6 +950,7 @@ class Handler(BaseHTTPRequestHandler):
             item = dict(payload)
             item.setdefault("id", "item-%d" % int(time.time() * 1000))
             item.setdefault("quantity", 1)
+            normalize_stock(item)
             inv.setdefault("items", []).append(item)
             save_inv(inv)
             if item.get("images"):
@@ -881,13 +965,18 @@ class Handler(BaseHTTPRequestHandler):
             for it in inv.get("items", []):
                 if it.get("id") == item_id:
                     old_imgs = list(it.get("images", []))
+                    had_loc = bool(str(it.get("location") or "").strip())
                     for k, v in payload.items():
                         if k != "id":
                             it[k] = v
+                    # A bare quantity/location edit (the card's +/- buttons, an
+                    # agent) lands on the primary stash of a split item.
+                    apply_scalar_stock_edit(it, payload)
+                    normalize_stock(it)
                     # An undelivered (ordered) item that gets a location has
                     # arrived: clear the flag unless the edit sets it explicitly.
                     if (it.get("undelivered") and "undelivered" not in payload
-                            and str(payload.get("location") or "").strip()):
+                            and not had_loc and str(it.get("location") or "").strip()):
                         it["undelivered"] = False
                     save_inv(inv)
                     new_imgs = [x for x in it.get("images", []) if x not in old_imgs]
@@ -941,7 +1030,7 @@ class Handler(BaseHTTPRequestHandler):
                 item = dict(cand)
                 item.setdefault("id", "item-%d" % int(time.time() * 1000))
                 item.setdefault("quantity", 1)
-                inv.setdefault("items", []).append(item)
+                inv.setdefault("items", []).append(normalize_stock(item))
             elif action in ("add", "remove", "set"):
                 tid = target_id or rec.get("match_id") or (rec.get("matches") or [None])[0]
                 target = next((it for it in inv.get("items", []) if it.get("id") == tid), None)
@@ -955,6 +1044,9 @@ class Handler(BaseHTTPRequestHandler):
                     target["quantity"] = max(0, tq - cq)
                 else:  # set
                     target["quantity"] = cq
+                # A split stash absorbs the change in its primary location.
+                apply_scalar_stock_edit(target, {"quantity": target["quantity"]})
+                normalize_stock(target)
                 imgs = target.get("images") or ([target["image"]] if target.get("image") else [])
                 for im in cand.get("images", []):
                     if im not in imgs:

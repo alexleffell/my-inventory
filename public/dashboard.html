@@ -393,6 +393,23 @@
   .wish-notice .row button { border-radius: 7px; border: 1px solid var(--orange2); background: var(--orange);
                 color: var(--on-orange); padding: 3px 10px; font-size: 12px; font-weight: 700; cursor: pointer; margin-left: auto; }
   .wish-notice .row button:disabled { opacity: .55; cursor: default; }
+  /* stock rows: one line per place this item is stored (amber = storage layer) */
+  .stock-rows { display: flex; flex-direction: column; gap: 8px; }
+  .s-row { display: flex; align-items: center; gap: 8px; }
+  .s-row .s-x { flex: 0 0 auto; color: var(--dim2); font-family: var(--mono); font-size: 13px; }
+  .s-row .s-qty { flex: 0 0 76px; text-align: center; }
+  .s-row .s-in { flex: 0 0 auto; color: var(--dim2); font-size: 12px; }
+  .s-row .s-loc { flex: 1 1 auto; min-width: 0; }
+  .s-row .s-del { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; cursor: pointer;
+                  border: 1px solid var(--line2); background: var(--panel2); color: var(--dim); font-size: 14px; }
+  .s-row .s-del:hover { border-color: var(--redfg); color: var(--redfg); }
+  .stock-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  .stock-total { font-family: var(--mono); font-size: 12px; color: var(--amberfg); }
+  .chip.loc .cq { font-family: var(--mono); opacity: .75; margin-left: 4px; }
+  .d-stock { display: flex; flex-direction: column; gap: 4px; }
+  .d-stock .row { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; }
+  .d-stock .row .where { color: var(--amberfg); }
+  .d-stock .row .n { font-family: var(--mono); color: var(--text); }
   .edit-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .edit-strip:empty { display: none; }
   .edit-strip .shot { position: relative; }
@@ -606,9 +623,15 @@
         <div class="form">
           <div class="field full"><label for="f-name">Name <span class="hint">— optional, leave blank to auto-identify from the photo</span></label><input id="f-name" placeholder="e.g. HC-05 Bluetooth module"></div>
           <div class="field"><label for="f-category">Category</label><input id="f-category" list="cats-list" placeholder="e.g. Resistors"></div>
-          <div class="field"><label for="f-quantity">Quantity</label><input id="f-quantity" type="number" min="0" value="1"></div>
-          <div class="field"><label for="f-location">Location</label><input id="f-location" list="locs-list" placeholder="e.g. Bag 1"></div>
           <div class="field"><label for="f-condition">Condition</label><input id="f-condition" placeholder="e.g. New (sealed)"></div>
+          <div class="field full" id="stock-field">
+            <label id="stock-label">Stock <span class="hint">— add a row per place if this part is split across bags/shelves</span></label>
+            <div class="stock-rows" id="stock-rows" role="group" aria-labelledby="stock-label"></div>
+            <div class="stock-foot">
+              <button type="button" class="btn" id="add-stock-btn">＋ Add another location</button>
+              <span class="stock-total" id="stock-total"></span>
+            </div>
+          </div>
           <div class="field full"><label for="f-notes">Notes</label><textarea id="f-notes" placeholder="SKU, specs, anything useful…"></textarea></div>
           <div class="field full">
             <label>Photos</label>
@@ -898,13 +921,29 @@ $('users-list').addEventListener('click', async e => {
   else toast(res.error || 'Delete failed', true);
 });
 
+// ---- stock: an item can be split across several places ----
+// `stock` is [{location, quantity}, ...] and only exists when an item lives in
+// two or more places; `location`/`quantity` stay the primary stash and the
+// total, so everything below works the same for a plain one-bag item.
+function stashes(it) {
+  if (Array.isArray(it.stock) && it.stock.length) {
+    return it.stock.map(r => ({ location: String(r.location || '').trim(), quantity: Number(r.quantity) || 0 }));
+  }
+  return [{ location: String(it.location || '').trim(), quantity: Number(it.quantity) || 0 }];
+}
+const isSplit = it => Array.isArray(it.stock) && it.stock.length > 1;
+const itemLocs = it => stashes(it).map(s => s.location).filter(Boolean);
+const qtyAt = (it, loc) => stashes(it).filter(s => s.location === loc)
+                                      .reduce((a, s) => a + s.quantity, 0);
+
 function render() {
   if (editingId) return; // don't yank the grid out while a modal is open
   const q = $('q').value.toLowerCase();
   const catF = activeCat, locF = $('loc').value, sort = $('sort').value;
   let items = ITEMS.filter(it => {
-    const hay = [it.name, it.category, it.location, it.notes].join(' ').toLowerCase();
-    return (!q || hay.includes(q)) && (!catF || it.category === catF) && (!locF || it.location === locF);
+    const locs = itemLocs(it);
+    const hay = [it.name, it.category, locs.join(' '), it.notes].join(' ').toLowerCase();
+    return (!q || hay.includes(q)) && (!catF || it.category === catF) && (!locF || locs.includes(locF));
   });
   const idx = {}; ITEMS.forEach((it, i) => idx[it.id] = i);
   if (sort === 'name') items.sort((a,b) => (a.name||'').localeCompare(b.name||''));
@@ -924,17 +963,18 @@ function render() {
         ${(it.models && it.models.length) ? `<button type="button" class="model-badge" data-act="view3d" title="View 3D model"><span class="ico" aria-hidden="true">🧊</span> 3D${it.models.length > 1 ? ' · ' + it.models.length : ''}</button>` : ``}
         ${it.undelivered ? `<span class="flag" title="Ordered, not delivered yet — set a location when it arrives">🚚 not delivered</span>` : ``}
         ${flagged ? `<span class="flag" title="Has unconfirmed details">check</span>` : ``}
-        ${isAdmin ? `<div class="qty-badge">
+        ${isAdmin && !isSplit(it) ? `<div class="qty-badge">
           <button data-act="dec" aria-label="Decrease quantity">−</button>
           <span class="n">${it.quantity ?? 1}</span>
           <button data-act="inc" aria-label="Increase quantity">+</button>
-        </div>` : `<div class="qty-badge static"><span class="n">×${it.quantity ?? 1}</span></div>`}
+        </div>` : `<div class="qty-badge static" title="${esc(stashes(it).map(st => (st.location || 'Unfiled') + ' ×' + st.quantity).join(' · '))}"><span class="n">×${it.quantity ?? 1}</span></div>`}
       </div>
       <div class="body">
         <div class="name">${it.name ? esc(it.name) : '<span style="color:var(--dim);font-style:italic">⏳ Identifying…</span>'}</div>
         <div class="chips">
           ${it.category ? `<button type="button" class="chip" data-act="fcat" title="Filter: ${esc(it.category)}">${esc(it.category)}</button>` : ''}
-          ${it.location ? `<button type="button" class="chip loc" data-act="floc" title="Filter: ${esc(it.location)}">${esc(it.location)}</button>` : ''}
+          ${stashes(it).filter(st => st.location).map(st =>
+            `<button type="button" class="chip loc" data-act="floc" data-loc="${esc(st.location)}" title="Filter: ${esc(st.location)}">${esc(st.location)}${isSplit(it) ? `<span class="cq">×${st.quantity}</span>` : ''}</button>`).join('')}
           ${it.condition ? `<span class="chip cond">${esc(it.condition)}</span>` : ''}
         </div>
         ${it.notes ? `<div class="notes${longNotes ? ' clamp" data-act="notes" tabindex="0" title="Show full notes' : ''}">${esc(it.notes)}</div>` : ''}
@@ -986,7 +1026,7 @@ $('empty').addEventListener('click', e => {
 function refreshMeta() {
   const units = ITEMS.reduce((a,it) => a + (Number(it.quantity)||0), 0);
   const cats = [...new Set(ITEMS.map(it => it.category).filter(Boolean))].sort();
-  const locs = [...new Set(ITEMS.map(it => it.location).filter(Boolean))].sort();
+  const locs = [...new Set(ITEMS.flatMap(itemLocs))].sort();
   $('s-items').textContent = ITEMS.length;
   $('s-units').textContent = units;
   $('s-cats').textContent = cats.length;
@@ -1004,20 +1044,23 @@ let smOpen = null;   // currently expanded location, e.g. "Bag 3"
 // storage map collapse: persisted; defaults collapsed on phone widths
 let smCollapsed = (localStorage.getItem('smCollapsed') ?? (window.innerWidth <= 620 ? '1' : '0')) === '1';
 function smItemsFor(loc) {
-  return ITEMS.filter(it => (it.location || '').trim() === loc);
+  return ITEMS.filter(it => itemLocs(it).includes(loc));
 }
 function renderStorageMap() {
   // group items by container type -> number -> {n items, units}
   const groups = {};   // type -> { num -> {n, units} }
   for (const it of ITEMS) {
-    const m = /^([A-Za-z]+)\s+(\d+)$/.exec((it.location || '').trim());
-    if (!m) continue;
-    const type = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
-    const num = +m[2];
-    const g = (groups[type] = groups[type] || {});
-    const slot = (g[num] = g[num] || { n: 0, units: 0 });
-    slot.n += 1;
-    slot.units += Number(it.quantity) || 0;
+    // A split item shows up in every bag it has units in, with that bag's count.
+    for (const st of stashes(it)) {
+      const m = /^([A-Za-z]+)\s+(\d+)$/.exec(st.location);
+      if (!m) continue;
+      const type = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
+      const num = +m[2];
+      const g = (groups[type] = groups[type] || {});
+      const slot = (g[num] = g[num] || { n: 0, units: 0 });
+      slot.n += 1;
+      slot.units += st.quantity;
+    }
   }
   const types = Object.keys(groups).sort((a, b) => {
     const ia = SM_ORDER.indexOf(a), ib = SM_ORDER.indexOf(b);
@@ -1061,7 +1104,7 @@ function renderStorageDetail() {
   const box = $('sm-detail');
   const items = smOpen ? smItemsFor(smOpen) : [];
   if (!items.length) { smOpen = null; box.innerHTML = ''; return; }   // location emptied → collapse
-  const units = items.reduce((a, it) => a + (Number(it.quantity) || 0), 0);
+  const units = items.reduce((a, it) => a + qtyAt(it, smOpen), 0);
   box.innerHTML = `
     <div class="sm-dhead">
       <b>${esc(smOpen)}</b>
@@ -1077,7 +1120,7 @@ function renderStorageDetail() {
         const nm = it.name ? esc(it.name) : '⏳ Identifying…';
         return `<div class="sm-item">${thumb}
           <div class="sm-iname">${nm}</div>
-          <div class="sm-iqty">×${it.quantity ?? 1}</div></div>`;
+          <div class="sm-iqty">×${qtyAt(it, smOpen)}${isSplit(it) ? ` <span title="Split across ${esc(itemLocs(it).join(', '))}">of ${it.quantity}</span>` : ''}</div></div>`;
       }).join('')}
     </div>`;
 }
@@ -1152,16 +1195,19 @@ function renderDetail() {
     <div class="d-info">
       <div class="chips">
         ${it.category ? `<span class="chip">${esc(it.category)}</span>` : ''}
-        ${it.location ? `<span class="chip loc">${esc(it.location)}</span>` : ''}
+        ${stashes(it).filter(st => st.location).map(st =>
+          `<span class="chip loc">${esc(st.location)}${isSplit(it) ? `<span class="cq">×${st.quantity}</span>` : ''}</span>`).join('')}
         ${it.condition ? `<span class="chip cond">${esc(it.condition)}</span>` : ''}
         ${it.undelivered ? `<span class="chip warn" title="Ordered, not delivered yet — set a location when it arrives">🚚 not delivered</span>` : ''}
         ${flagged ? `<span class="chip warn" title="Has unconfirmed details">check</span>` : ''}
       </div>
-      <div class="d-field"><label>Quantity</label>
-        ${isAdmin
+      <div class="d-field"><label>Quantity${isSplit(it) ? ' — total' : ''}</label>
+        ${isAdmin && !isSplit(it)
           ? `<div class="d-qty-row"><button type="button" class="btn" data-dq="-1" aria-label="Decrease quantity">−</button><b class="d-qty">×${it.quantity ?? 1}</b><button type="button" class="btn" data-dq="1" aria-label="Increase quantity">+</button></div>`
           : `<div class="d-qty">×${it.quantity ?? 1}</div>`}
       </div>
+      ${isSplit(it) ? `<div class="d-field"><label>Stored in</label><div class="d-stock">${stashes(it).map(st =>
+          `<div class="row"><span class="where">${esc(st.location || 'Unfiled')}</span><span class="n">×${st.quantity}</span></div>`).join('')}</div></div>` : ''}
       ${it.notes ? `<div class="d-field"><label>Notes</label><div class="d-notes">${esc(it.notes)}</div></div>` : ''}
       ${models.length ? `<div class="d-field"><label>3D models</label><div class="models-list">${models.map((f, i) => `
         <div class="m-row"><span class="m-ico ico" aria-hidden="true">🧊</span><span class="m-name">${esc(shortModelName(f))}</span><span class="m-ext">${esc(MODEL_EXT(f))}</span>
@@ -1247,7 +1293,7 @@ $('grid').addEventListener('click', async e => {
   if (act === 'fcat' || act === 'floc') {
     const it = ITEMS.find(x => x.id === id); if (!it) return;
     if (act === 'fcat') { activeCat = it.category || ''; renderSideCats(lastCats); }
-    else $('loc').value = it.location || '';
+    else $('loc').value = e.target.closest('[data-loc]')?.dataset.loc || it.location || '';
     render();
     return;
   }
@@ -1280,6 +1326,55 @@ $('lb-prev').addEventListener('click', e => { e.stopPropagation(); lbStep(-1); }
 $('lb-next').addEventListener('click', e => { e.stopPropagation(); lbStep(1); });
 $('lightbox-img').addEventListener('click', e => { e.stopPropagation(); lbStep(1); });
 
+// ---- modal: stock rows (one per place the item is stored) ----
+let stockDraft = [];   // [{location, quantity}] being edited; row 0 is the primary
+function renderStockRows() {
+  const many = stockDraft.length > 1;
+  $('stock-rows').innerHTML = stockDraft.map((r, i) => `
+    <div class="s-row" data-si="${i}">
+      <span class="s-x">×</span>
+      <input class="s-qty" type="number" min="0" value="${r.quantity}" aria-label="Quantity in location ${i + 1}">
+      <span class="s-in">in</span>
+      <input class="s-loc" list="locs-list" placeholder="e.g. Bag 1" value="${esc(r.location)}" aria-label="Location ${i + 1}">
+      ${many ? `<button type="button" class="s-del" data-sdel="${i}" title="Remove this location" aria-label="Remove location ${i + 1}">✕</button>` : ''}
+    </div>`).join('');
+  const total = stockDraft.reduce((a, r) => a + (Number(r.quantity) || 0), 0);
+  $('stock-total').textContent = many ? `total ×${total} across ${stockDraft.length} locations` : '';
+}
+function readStockRows() {
+  stockDraft = [...$('stock-rows').querySelectorAll('.s-row')].map(row => ({
+    location: row.querySelector('.s-loc').value.trim(),
+    quantity: Math.max(0, Number(row.querySelector('.s-qty').value) || 0),
+  }));
+}
+function setStockDraft(it) {
+  stockDraft = (Array.isArray(it && it.stock) && it.stock.length)
+    ? it.stock.map(r => ({ location: String(r.location || '').trim(), quantity: Number(r.quantity) || 0 }))
+    : [{ location: String((it && it.location) || ''), quantity: it && it.quantity != null ? Number(it.quantity) : 1 }];
+  renderStockRows();
+}
+$('stock-rows').addEventListener('input', () => {
+  readStockRows();
+  const total = stockDraft.reduce((a, r) => a + r.quantity, 0);
+  $('stock-total').textContent = stockDraft.length > 1
+    ? `total ×${total} across ${stockDraft.length} locations` : '';
+});
+$('stock-rows').addEventListener('click', e => {
+  const del = e.target.closest('[data-sdel]');
+  if (!del) return;
+  readStockRows();
+  stockDraft.splice(+del.dataset.sdel, 1);
+  if (!stockDraft.length) stockDraft = [{ location: '', quantity: 1 }];
+  renderStockRows();
+});
+$('add-stock-btn').addEventListener('click', () => {
+  readStockRows();
+  stockDraft.push({ location: '', quantity: 1 });
+  renderStockRows();
+  const rows = $('stock-rows').querySelectorAll('.s-row .s-loc');
+  rows[rows.length - 1].focus();
+});
+
 // ---- modal ----
 function openEdit(id) {
   const it = ITEMS.find(x => x.id === id); if (!it) return;
@@ -1287,8 +1382,7 @@ function openEdit(id) {
   $('modal-title').textContent = 'Edit item';
   $('f-name').value = it.name || '';
   $('f-category').value = it.category || '';
-  $('f-quantity').value = it.quantity ?? 1;
-  $('f-location').value = it.location || '';
+  setStockDraft(it);
   $('f-condition').value = it.condition || '';
   $('f-notes').value = it.notes || '';
   $('del-btn').style.display = '';
@@ -1307,8 +1401,8 @@ function openAdd() {
   editingId = '__new__';
   $('modal-title').textContent = 'Add item';
   ['name','category','condition','notes'].forEach(f => $('f-'+f).value = '');
-  $('f-location').value = localStorage.getItem('lastLocation') || '';  // default to last used
-  $('f-quantity').value = 1;
+  // default to the last used bag
+  setStockDraft({ location: localStorage.getItem('lastLocation') || '', quantity: 1 });
   $('del-btn').style.display = 'none';
   origImages = []; editImages = [];
   renderEditStrip();
@@ -1322,11 +1416,16 @@ function openAdd() {
 function closeModal() { editingId = null; hideEditCam(); hideOverlay('overlay'); render(); }
 
 function collect() {
+  readStockRows();
+  const rows = stockDraft.filter(r => r.location || r.quantity > 0);
   return {
     name: $('f-name').value.trim(),
     category: $('f-category').value.trim(),
-    quantity: Number($('f-quantity').value) || 0,
-    location: $('f-location').value.trim(),
+    // `stock` is authoritative; quantity/location mirror it so any reader that
+    // predates the split (agents, the API's summary rows) still gets the truth.
+    stock: rows,
+    quantity: rows.reduce((a, r) => a + r.quantity, 0),
+    location: rows.length ? rows[0].location : '',
     condition: $('f-condition').value.trim(),
     notes: $('f-notes').value.trim(),
     images: editImages.slice(),
@@ -1348,7 +1447,7 @@ function checkDup() {
   box.innerHTML = `<b>⚠ Already in inventory.</b> Saving here makes a <i>separate</i> entry — `
     + `to add/remove quantity, open the existing stash instead:`
     + `<div class="rows">` + matches.map(it =>
-        `<div class="row"><span class="where">${esc(it.location || '—')} · ×${it.quantity ?? 1}</span>`
+        `<div class="row"><span class="where">${esc(stashes(it).map(st => (st.location || '—') + ' ×' + st.quantity).join(' · '))}</span>`
         + `<span>${esc(it.name)}</span>`
         + `<button data-open="${esc(it.id)}">Open to adjust</button></div>`).join('')
     + `</div>`;

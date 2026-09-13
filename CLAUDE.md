@@ -144,7 +144,7 @@ hardcoded.
 | `POST /api/confirm`  | `{files:[...], quantity, note, location}` → writes one sidecar for the item. |
 | `POST /api/ingest`   | Upsert an item by `id` (an agent's identified items). No review marker. |
 | `POST /api/add`      | Create an item (dashboard manual add); server assigns `id`. |
-| `POST /api/update`   | `{id, ...fields}` → merge fields. New `images` ⇒ a `review-*.json` marker. |
+| `POST /api/update`   | `{id, ...fields}` → merge fields. New `images` ⇒ a `review-*.json` marker. Pass `stock` to re-split the item across locations. |
 | `POST /api/delete`   | `{id}` → remove the item.                                   |
 | `GET /api/pending`   | Returns pending duplicate decisions (`pending.json`).       |
 | `POST /api/pending`  | `{matches:[...], candidate}` → queue a duplicate for the user. |
@@ -228,8 +228,12 @@ summary/description.
   "id": "cap-<ms>",            // stable id; for captured items = first image filename stem
   "name": "Active 5V Buzzer 3kHz",
   "category": "Audio",
-  "quantity": 5,
-  "location": "Bag 1",         // "<Bag|Bin> <number>"
+  "quantity": 5,               // TOTAL units, across every location
+  "location": "Bag 1",         // "<Bag|Bin> <number>"; the primary place when split
+  "stock": [                   // optional: only when split across 2+ places
+    {"location": "Bag 1", "quantity": 3},
+    {"location": "Shelf A", "quantity": 2}
+  ],
   "condition": "New (sealed bag)",
   "notes": "SKU #106611. ...",
   "images": ["cap-<ms>.png", ...], // one or more photos; omitted/empty for manual adds
@@ -238,12 +242,38 @@ summary/description.
 }
 ```
 
+**One item, several places (`stock`).** A part is often split: some in a bag,
+the rest on a shelf. `stock` is `[{location, quantity}, ...]` and exists ONLY
+while the item sits in two or more places. It is then the source of truth, and
+the server derives the other two fields from it on every write: `quantity` is
+the sum and `location` mirrors the first row. An item in one place carries no
+`stock` at all, so every older reader (cards, storage map, `/api/summary`,
+agents) keeps working unchanged.
+
+Rules enforced by `normalize_stock()` / `apply_scalar_stock_edit()` in
+`server.py` (covered by `tests/test_stock_locations.py`):
+- Sending `stock` with one row (or none) DROPS the array and leaves a plain
+  single-location item. Reducing to one place is just an edit, not a special case.
+- A bare `quantity`/`location` edit on a split item (the card's +/- buttons, an
+  agent that predates `stock`) lands on the FIRST row, keeping sum and rows in step.
+- `/api/summary` counts a split item once per place it is stored; its `total_units`
+  still counts each unit once.
+- Summary rows from `/api/items` carry `stock` when present, so an agent scanning
+  the list sees both places without a second call.
+
+In the dashboard, a split item shows one amber location chip per place (each with
+its own count), a per-location breakdown in the detail modal, and a repeater in the
+edit modal ("＋ Add another location"). The card's +/- quick-quantity buttons are
+replaced by a static total for split items: which bag you took it from is a
+decision, not a guess.
+
 **Ordered-but-not-delivered items.** Items added from a purchase order before the
 package arrives carry `"undelivered": true` and (deliberately) no `location`.
 The dashboard shows a "🚚 not delivered" flag on the card and detail modal.
-`POST /api/update` clears the flag automatically when an update sets a non-empty
-`location` (the item arrived and got filed) — unless the same payload sets
-`undelivered` explicitly. Notes should carry the order ID and order date.
+`POST /api/update` clears the flag automatically when an update gives a
+previously unfiled item a non-empty `location` (it arrived and got filed),
+whether that came from `location` or from a `stock` row, unless the same payload
+sets `undelivered` explicitly. Notes should carry the order ID and order date.
 
 ## 3D models on items
 
@@ -426,6 +456,14 @@ instead of rediscovering it.
   download with a plain browser-UA `curl`. Product URL slugs are Finnish and
   sometimes disagree with the SKU (a `x10` SKU under a `x20kpl` slug); trust
   the SKU and flag the discrepancy to the user.
+  **Searching for stock: query the Finnish noun, never the English part
+  number.** Product titles are Finnish and the search does prefix matching on
+  them, so `?q=ACS712` returns nothing and silently redirects to the home page
+  (looks identical to "not stocked"), while `virta-anturi` returns all three
+  ACS712T boards. A `/catalogsearch/result/` URL hit directly also redirects
+  home — drive the header search box instead. Before concluding a Finnish shop
+  does not carry a part, retry with the Finnish category word
+  (virta-anturi, vastus, kondensaattori, liitin, …).
 
 ### Gotchas (learned the hard way)
 
