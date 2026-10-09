@@ -33,7 +33,10 @@ or with an LLM agent.
   sees the edit controls. Auth is off until you create the first admin, so local
   dev needs no login.
 - **Search, filter, and a bag/bin map.** Filter by category, location, or free
-  text. A storage map shows which bags are in use.
+  text, including the item id. The query and filters stay in the URL, so Back
+  and a shared link restore them. A storage map shows which bags are in use.
+- **A unique link per item.** `/i/<id>` opens that item. The detail modal shows
+  the id and a copyable link. Right-click the name on a card for the same URL.
 - **Duplicate handling in the UI.** When you add a part you already have, the app
   surfaces a duplicate card so you can add to the existing stash, set a new count,
   or file it as a separate bag. No silent double entries.
@@ -63,6 +66,7 @@ python3 server.py
 That's it. No dependencies. Tested on Python 3.9+.
 
 - **Dashboard:** http://localhost:8770/dashboard
+- **Item permalink:** http://localhost:8770/i/<id>
 - **Capture:** http://localhost:8770/capture
 - **To buy:** http://localhost:8770/buy
 
