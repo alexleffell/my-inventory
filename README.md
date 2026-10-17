@@ -17,6 +17,8 @@ with real content out of the box.
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
+Product documents for an assigned agent: [docs/GOAL.md](docs/GOAL.md), [docs/PRD.md](docs/PRD.md), and [docs/ARD.md](docs/ARD.md).
+
 ## Why
 
 Most parts-inventory apps want you to type part numbers. This one is built around
