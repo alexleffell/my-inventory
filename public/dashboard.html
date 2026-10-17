@@ -197,6 +197,8 @@
   }
   .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 7px; flex: 1; cursor: pointer; }
   .name { font-weight: 650; font-size: 15px; line-height: 1.35; overflow-wrap: break-word; }
+  .name a { color: inherit; text-decoration: none; }
+  .name a:hover { color: var(--orangefg); }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
   /* chips read like printed label-maker tape: mono, squared, quiet borders */
   .chip { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .03em;
@@ -290,6 +292,8 @@
   .sm-item .sm-thumb .noimg { font-size: 22px; opacity: .5; }
   .sm-item .sm-iname { font-size: 11px; margin-top: 5px; line-height: 1.3; color: var(--text);
               display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sm-item .sm-iname a { color: inherit; text-decoration: none; }
+  .sm-item .sm-iname a:hover { color: var(--orangefg); }
   .sm-item .sm-iqty { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 1px; }
   @media (max-width: 640px) {
     .storage-map { gap: 8px 16px; padding-top: 8px; }
@@ -452,6 +456,8 @@
   .d-qty { font: 600 20px/1.2 var(--mono); }
   .d-notes { color: var(--dim2); font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: break-word; }
   .d-id { font-family: var(--mono); font-size: 11.5px; color: var(--faint); word-break: break-all; }
+  .d-id a { color: inherit; text-decoration: none; }
+  .d-id a:hover { color: var(--orangefg); }
   @media (max-width: 680px) {
     .d-wrap { grid-template-columns: 1fr; }
     .d-media { border-right: none; border-bottom: 1px solid var(--line); }
@@ -558,7 +564,7 @@
     <div class="main-col">
       <div class="toolbar">
         <button type="button" class="btn menu-btn" id="menu-btn" aria-label="Open menu" aria-expanded="false">☰</button>
-        <div class="search"><input id="q" aria-label="Search inventory" placeholder="Search name, category, location, notes…"><button type="button" class="q-clear" id="q-clear" aria-label="Clear search" hidden>✕</button></div>
+        <div class="search"><input id="q" aria-label="Search inventory" placeholder="Search name, id, category, location, notes…"><button type="button" class="q-clear" id="q-clear" aria-label="Clear search" hidden>✕</button></div>
         <select id="loc" aria-label="Filter by location"><option value="">All locations</option></select>
         <select id="sort" aria-label="Sort items">
           <option value="recent">Newest first</option>
@@ -605,6 +611,7 @@
         <button class="btn" id="d-edit">✎ Edit</button>
         <button class="btn" id="d-identify" hidden>✨ Identify</button>
         <div class="spacer"></div>
+        <button class="btn" id="d-copy" title="Copy link to this item">Copy link</button>
         <button class="btn" id="d-close">Close</button>
       </div>
     </div>
@@ -744,6 +751,7 @@
 <script>
 let ITEMS = [];
 let activeCat = '';         // sidebar category filter
+let activeLoc = '';
 let lastCats = [];          // current category list (for sidebar re-render)
 let detailId = null, dIdx = 0;   // item detail modal state
 let editingId = null;       // id being edited, or "__new__", or null
@@ -936,14 +944,93 @@ const itemLocs = it => stashes(it).map(s => s.location).filter(Boolean);
 const qtyAt = (it, loc) => stashes(it).filter(s => s.location === loc)
                                       .reduce((a, s) => a + s.quantity, 0);
 
-function render() {
+const DEFAULT_TITLE = document.title;
+const SORTS = ['recent', 'name', 'qty', 'cat'];
+let listBase = '/';
+let itemsLoaded = false;
+let applyingUrl = false;
+function itemHref(id) { return '/i/' + encodeURIComponent(id); }
+function itemIdFromPath(path) {
+  const m = /^\/i\/([^/]+)$/.exec(path || '');
+  if (!m) return '';
+  try { return decodeURIComponent(m[1]); } catch (e) { return ''; }
+}
+function itemIdFromLocation() { return itemIdFromPath(location.pathname); }
+function noteListBase() {
+  if (location.pathname === '/' || location.pathname === '/dashboard') listBase = location.pathname;
+}
+function normQuery() { return $('q').value.trim().toLowerCase(); }
+function exactById(q) {
+  if (!q) return null;
+  return ITEMS.find(it => String(it.id || '').toLowerCase() === q) || null;
+}
+function itemHay(it) {
+  return [it.id, it.name, it.category, itemLocs(it).join(' '), it.notes].join(' ').toLowerCase();
+}
+function currentQuery() {
+  const p = new URLSearchParams();
+  const q = $('q').value;
+  if (q) p.set('q', q);
+  if (activeCat) p.set('cat', activeCat);
+  if (activeLoc) p.set('loc', activeLoc);
+  const sort = $('sort').value;
+  if (sort && sort !== 'recent') p.set('sort', sort);
+  const s = p.toString();
+  return s ? '?' + s : '';
+}
+function urlItemId() {
+  if (detailId) return detailId;
+  const fromPath = itemIdFromLocation();
+  if (!fromPath) return '';
+  if (!itemsLoaded || ITEMS.some(it => it.id === fromPath)) return fromPath;
+  return '';
+}
+function writeUrl(mode, itemId) {
+  if (applyingUrl) return;
+  const id = itemId === undefined ? urlItemId() : (itemId || '');
+  const dest = (id ? itemHref(id) : listBase) + currentQuery();
+  if (location.pathname + location.search === dest) return;
+  const state = { itemId: id };
+  if (mode === 'replace') history.replaceState(state, '', dest);
+  else history.pushState(state, '', dest);
+}
+function readFilters() {
+  const p = new URLSearchParams(location.search);
+  const sort = p.get('sort') || 'recent';
+  return {
+    q: p.get('q') || '',
+    cat: p.get('cat') || '',
+    loc: p.get('loc') || '',
+    sort: SORTS.includes(sort) ? sort : 'recent',
+  };
+}
+function applyFiltersFromUrl() {
+  const v = readFilters();
+  applyingUrl = true;
+  $('q').value = v.q;
+  activeCat = v.cat;
+  activeLoc = v.loc;
+  $('sort').value = v.sort;
+  const loc = $('loc');
+  if ([...loc.options].some(o => o.value === v.loc)) loc.value = v.loc;
+  else loc.value = '';
+  applyingUrl = false;
+}
+function setDocTitle(it) {
+  document.title = (it && it.name) ? (it.name + " · Moshe's Inventory") : DEFAULT_TITLE;
+}
+noteListBase();
+applyFiltersFromUrl();
+
+function render(urlMode) {
+  if (urlMode) writeUrl(urlMode);
   if (editingId) return; // don't yank the grid out while a modal is open
-  const q = $('q').value.toLowerCase();
-  const catF = activeCat, locF = $('loc').value, sort = $('sort').value;
-  let items = ITEMS.filter(it => {
+  const q = normQuery();
+  const catF = activeCat, locF = activeLoc, sort = $('sort').value;
+  const exact = exactById(q);
+  let items = exact ? [exact] : ITEMS.filter(it => {
     const locs = itemLocs(it);
-    const hay = [it.name, it.category, locs.join(' '), it.notes].join(' ').toLowerCase();
-    return (!q || hay.includes(q)) && (!catF || it.category === catF) && (!locF || locs.includes(locF));
+    return (!q || itemHay(it).includes(q)) && (!catF || it.category === catF) && (!locF || locs.includes(locF));
   });
   const idx = {}; ITEMS.forEach((it, i) => idx[it.id] = i);
   if (sort === 'name') items.sort((a,b) => (a.name||'').localeCompare(b.name||''));
@@ -970,7 +1057,7 @@ function render() {
         </div>` : `<div class="qty-badge static" title="${esc(stashes(it).map(st => (st.location || 'Unfiled') + ' ×' + st.quantity).join(' · '))}"><span class="n">×${it.quantity ?? 1}</span></div>`}
       </div>
       <div class="body">
-        <div class="name">${it.name ? esc(it.name) : '<span style="color:var(--dim);font-style:italic">⏳ Identifying…</span>'}</div>
+        <div class="name"><a class="item-link" href="${itemHref(it.id)}">${it.name ? esc(it.name) : '<span style="color:var(--dim);font-style:italic">⏳ Identifying…</span>'}</a></div>
         <div class="chips">
           ${it.category ? `<button type="button" class="chip" data-act="fcat" title="Filter: ${esc(it.category)}">${esc(it.category)}</button>` : ''}
           ${stashes(it).filter(st => st.location).map(st =>
@@ -1006,21 +1093,21 @@ function render() {
 function renderFilterPills() {
   const pills = [];
   if (activeCat) pills.push(`<button type="button" class="fpill" data-clear="cat" title="Clear category filter">${esc(activeCat)} <span class="x" aria-hidden="true">✕</span></button>`);
-  const lv = $('loc').value;
+  const lv = activeLoc;
   if (lv) pills.push(`<button type="button" class="fpill amber" data-clear="loc" title="Clear location filter">${esc(lv)} <span class="x" aria-hidden="true">✕</span></button>`);
   $('filter-pills').innerHTML = pills.join('');
 }
 $('filter-pills').addEventListener('click', e => {
   const b = e.target.closest('[data-clear]'); if (!b) return;
   if (b.dataset.clear === 'cat') { activeCat = ''; renderSideCats(lastCats); }
-  else $('loc').value = '';
-  render();
+  else { activeLoc = ''; $('loc').value = ''; }
+  render('push');
 });
-$('q-clear').addEventListener('click', () => { $('q').value = ''; render(); $('q').focus(); });
+$('q-clear').addEventListener('click', () => { $('q').value = ''; render('push'); $('q').focus(); });
 $('empty').addEventListener('click', e => {
   if (e.target.id !== 'clear-filters') return;
-  $('q').value = ''; activeCat = ''; $('loc').value = '';
-  renderSideCats(lastCats); render();
+  $('q').value = ''; activeCat = ''; activeLoc = ''; $('loc').value = '';
+  renderSideCats(lastCats); render('push');
 });
 
 function refreshMeta() {
@@ -1119,7 +1206,7 @@ function renderStorageDetail() {
           : `<div class="sm-thumb"><span class="noimg">📦</span></div>`;
         const nm = it.name ? esc(it.name) : '⏳ Identifying…';
         return `<div class="sm-item">${thumb}
-          <div class="sm-iname">${nm}</div>
+          <div class="sm-iname"><a class="item-link" href="${itemHref(it.id)}">${nm}</a></div>
           <div class="sm-iqty">×${qtyAt(it, smOpen)}${isSplit(it) ? ` <span title="Split across ${esc(itemLocs(it).join(', '))}">of ${it.quantity}</span>` : ''}</div></div>`;
       }).join('')}
     </div>`;
@@ -1145,7 +1232,7 @@ $('sm-detail').addEventListener('click', e => {
   if (imgs.length) openLightbox(imgs, 0);
 });
 function fillSelect(sel, values, allLabel) {
-  const cur = sel.value;
+  const cur = sel === $('loc') ? activeLoc : sel.value;
   sel.innerHTML = `<option value="">${allLabel}</option>` + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
   if (values.includes(cur)) sel.value = cur;
 }
@@ -1161,7 +1248,7 @@ function renderSideCats(cats) {
 $('side-cats').addEventListener('click', e => {
   const b = e.target.closest('.cat-row'); if (!b) return;
   activeCat = b.dataset.cat || '';
-  renderSideCats(lastCats); render(); closeDrawer();
+  renderSideCats(lastCats); render('push'); closeDrawer();
 });
 function openDrawer() { $('sidebar').classList.add('open'); $('scrim').classList.add('show'); $('menu-btn').setAttribute('aria-expanded', 'true'); }
 function closeDrawer() { $('sidebar').classList.remove('open'); $('scrim').classList.remove('show'); $('menu-btn').setAttribute('aria-expanded', 'false'); }
@@ -1169,13 +1256,20 @@ $('menu-btn').addEventListener('click', () => $('sidebar').classList.contains('o
 $('scrim').addEventListener('click', closeDrawer);
 
 // ---- item detail modal (public view of one item) ----
-function openDetail(id) {
-  const it = ITEMS.find(x => x.id === id); if (!it) return;
+function openDetail(id, fromUrl) {
+  const it = ITEMS.find(x => x.id === id);
+  if (!it) {
+    if (fromUrl && itemsLoaded) toast('Item not found', true);
+    return false;
+  }
   detailId = id; dIdx = 0;
   identifying = false;
   renderDetail();
-  showOverlay('detail-overlay');
+  if (!$('detail-overlay').classList.contains('show')) showOverlay('detail-overlay');
+  setDocTitle(it);
+  if (!fromUrl) writeUrl('push', id);
   $('d-x').focus();
+  return true;
 }
 function renderDetail() {
   const it = ITEMS.find(x => x.id === detailId); if (!it) return;
@@ -1213,6 +1307,7 @@ function renderDetail() {
         <div class="m-row"><span class="m-ico ico" aria-hidden="true">🧊</span><span class="m-name">${esc(shortModelName(f))}</span><span class="m-ext">${esc(MODEL_EXT(f))}</span>
           <button type="button" class="btn" data-dmview="${i}">View</button></div>`).join('')}</div></div>` : ''}
       <div class="d-field"><label>ID</label><div class="d-id">${esc(it.id)}</div></div>
+      <div class="d-field"><label>Link</label><div class="d-id"><a class="item-link" href="${itemHref(it.id)}">${esc(location.origin + itemHref(it.id))}</a></div></div>
     </div>`;
   const identifyButton = $('d-identify');
   const queued = QUEUE.some(q => q.id === detailId);
@@ -1220,7 +1315,12 @@ function renderDetail() {
   identifyButton.disabled = identifying || queued;
   identifyButton.textContent = queued ? '⏳ Identification queued' : identifying ? 'Queueing…' : '✨ Identify';
 }
-function closeDetail() { detailId = null; identifying = false; hideOverlay('detail-overlay'); }
+function closeDetail(fromUrl) {
+  detailId = null; identifying = false;
+  hideOverlay('detail-overlay');
+  setDocTitle(null);
+  if (!fromUrl) writeUrl('push', '');
+}
 $('d-wrap').addEventListener('click', e => {
   const dq = e.target.closest('[data-dq]');
   if (dq) {
@@ -1241,11 +1341,44 @@ $('d-wrap').addEventListener('click', e => {
     if (imgs && imgs.length) openLightbox(imgs, dIdx);
   }
 });
-$('d-x').addEventListener('click', closeDetail);
-$('d-close').addEventListener('click', closeDetail);
+$('d-x').addEventListener('click', () => closeDetail());
+$('d-close').addEventListener('click', () => closeDetail());
 $('detail-overlay').addEventListener('click', e => { if (e.target === $('detail-overlay')) closeDetail(); });
 $('d-edit').addEventListener('click', () => { const id = detailId; closeDetail(); openEdit(id); });
 $('d-identify').addEventListener('click', identifyDetailItem);
+$('d-copy').addEventListener('click', async () => {
+  if (!detailId) return;
+  const url = location.origin + itemHref(detailId);
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = url; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    }
+    toast('Link copied');
+  } catch (e) { toast('Could not copy link', true); }
+});
+document.addEventListener('click', e => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const a = e.target.closest('a[href^="/i/"]');
+  if (!a || a.target === '_blank') return;
+  const id = itemIdFromPath(a.getAttribute('href'));
+  if (!id) return;
+  e.preventDefault();
+  openDetail(id);
+});
+window.addEventListener('popstate', () => {
+  noteListBase();
+  applyFiltersFromUrl();
+  if (itemsLoaded) { renderSideCats(lastCats); render(); }
+  if (!itemsLoaded) return;
+  const id = itemIdFromLocation();
+  const showing = detailId === id && $('detail-overlay').classList.contains('show');
+  if (id) { if (!showing && !openDetail(id, true) && detailId) closeDetail(true); }
+  else if (detailId) closeDetail(true);
+});
 
 async function loadIdentifyStatus() {
   try {
@@ -1293,8 +1426,11 @@ $('grid').addEventListener('click', async e => {
   if (act === 'fcat' || act === 'floc') {
     const it = ITEMS.find(x => x.id === id); if (!it) return;
     if (act === 'fcat') { activeCat = it.category || ''; renderSideCats(lastCats); }
-    else $('loc').value = e.target.closest('[data-loc]')?.dataset.loc || it.location || '';
-    render();
+    else {
+      activeLoc = e.target.closest('[data-loc]')?.dataset.loc || it.location || '';
+      $('loc').value = [...$('loc').options].some(o => o.value === activeLoc) ? activeLoc : '';
+    }
+    render('push');
     return;
   }
   if (!e.target.closest('button, a')) openDetail(id);
@@ -1814,7 +1950,16 @@ document.addEventListener('keydown', e => {
   }
 });
 
-['q','loc','sort'].forEach(id => $(id).addEventListener('input', render));
+$('q').addEventListener('input', () => render('replace'));
+$('q').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const hit = exactById(normQuery());
+  if (!hit) return;
+  e.preventDefault();
+  openDetail(hit.id);
+});
+$('loc').addEventListener('change', () => { activeLoc = $('loc').value; render('push'); });
+$('sort').addEventListener('change', () => render('push'));
 
 // ---- identification queue (uploads + items awaiting the watcher agent) ----
 let lastQueueJSON = '';
@@ -1929,19 +2074,27 @@ $('pending-decisions').addEventListener('click', async e => {
 });
 
 // ---- live polling ----
+let itemUrlApplied = false;
+function applyItemUrl() {
+  const id = itemIdFromLocation();
+  if (!id) return;
+  if (!openDetail(id, true) && detailId) closeDetail(true);
+}
 async function poll() {
   try {
     const r = await fetch('/api/inventory');
     const next = (await r.json()).items || [];
-    if (!editingId && JSON.stringify(next) !== JSON.stringify(ITEMS)) {
-      ITEMS = next; refreshMeta(); render();
+    const same = JSON.stringify(next) === JSON.stringify(ITEMS);
+    ITEMS = next;
+    itemsLoaded = true;
+    if (!editingId && !same) {
+      refreshMeta(); render();
       if (detailId) renderDetail();  // open detail modal updates in place (e.g. watcher result)
-    } else if (editingId) {
-      ITEMS = next; // keep data fresh; redraw deferred until modal closes
     }
     try { renderPending(((await (await fetch('/api/pending')).json()).pending) || []); } catch (e) {}
     try { renderQueue(((await (await fetch('/api/queue')).json()).queue) || []); } catch (e) {}
     try { renderWishlist(((await (await fetch('/api/wishlist')).json()).wishlist) || []); } catch (e) {}
+    if (!itemUrlApplied) { itemUrlApplied = true; applyItemUrl(); }
   } catch (e) {}
   setTimeout(poll, 1500);
 }
