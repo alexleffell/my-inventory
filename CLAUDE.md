@@ -18,7 +18,9 @@ python3 server.py        # serves on http://localhost:8770 (stdlib only, no deps
 ```
 
 Routes: `/` and `/dashboard` → the dashboard (public read-only landing page; edit
-controls + a 📷 Capture link appear after admin login). `/capture` → the capture
+controls + a 📷 Capture link appear after admin login). `/i/<id>` → the same
+dashboard with that item's detail modal open (stable public permalink; the
+dashboard also pushStates here when you open an item). `/capture` → the capture
 page (camera tool). `/buy` (alias `/wishlist`) → the "To buy" page (purchase
 requests). Requires only Python 3 (tested on 3.9+). No build step.
 
@@ -39,7 +41,16 @@ Orange owns actions/selection/brand; amber owns the physical storage layer
 must use these tokens, not ad-hoc hex. The dashboard has a left sidebar
 (brand, stats, page nav, category filter via `activeCat`/`renderSideCats()`,
 admin actions) that collapses to a drawer under 920px, and an item detail
-modal (`openDetail(id)`) opened by clicking a card. Dialogs use
+modal (`openDetail(id)`) opened by clicking a card or visiting `/i/<id>`.
+Each item's name is an `<a href="/i/<id>">`; opening the modal pushStates
+that path, closing it returns to the list (`/` or `/dashboard`). The address
+bar also keeps the dashboard view: `q` (name, id, category, location, notes),
+`cat`, `loc`, and `sort`. Typing in the search box replaces the current
+history entry; changing a filter, the sort, or which item is open pushes one.
+Back and forward restore the box, the filters, and whether the detail modal
+is open. An exact item-id query shows that one item even when the category
+or location filter would hide it. Copy link copies the bare `/i/<id>`
+permalink. Dialogs use
 `role="dialog"` + background `inert` via `showOverlay()/hideOverlay()`
 (stacked focus restore) — route any new overlay through those helpers.
 

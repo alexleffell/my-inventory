@@ -22,7 +22,7 @@ import hmac
 import secrets
 import glob
 import threading
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -241,6 +241,27 @@ def pending_review_ids():
         if item_id:
             ids.add(item_id)
     return ids
+
+
+def item_id_from_path(path):
+    """Item id encoded in `/i/<id>`, or None if this is not that route.
+
+    IDs are `cap-<ms>` / `item-<ms>` (letters, digits, `_`, `.`, `-`). Anything
+    with a slash, `..`, or other punctuation is rejected so `/i/` cannot be
+    used as a path-traversal gadget.
+    """
+    if not path.startswith("/i/"):
+        return None
+    rest = path[3:]
+    if not rest or "/" in rest or rest in (".", ".."):
+        return None
+    ident = unquote(rest)
+    if not ident or "/" in ident or len(ident) > 80:
+        return None
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+    if ident[0] in ".-" or any(c not in allowed for c in ident):
+        return None
+    return ident
 
 
 # 3D model files an item can carry (models/ dir, item field "models": [...]).
@@ -568,6 +589,8 @@ class Handler(BaseHTTPRequestHandler):
             "/capture": "capture.html", "/buy": "wishlist.html", "/wishlist": "wishlist.html",
         }
         name = pages.get(path)
+        if not name and item_id_from_path(path):
+            name = "dashboard.html"
         if not name:
             self.send_response(404)
             self.end_headers()
@@ -580,6 +603,12 @@ class Handler(BaseHTTPRequestHandler):
         # are open. Editing requires logging in — every POST is gated to admin.
         if path == "/" or path == "/dashboard":
             return self._serve_file(os.path.join(PUBLIC, "dashboard.html"))
+        if path.startswith("/i/"):
+            # One stable URL per item. The dashboard opens that item's detail
+            # modal; a well-formed unknown id still serves the page (JS toasts).
+            if item_id_from_path(path):
+                return self._serve_file(os.path.join(PUBLIC, "dashboard.html"))
+            return self._send(404, {"error": "not found"})
         if path == "/capture":
             return self._serve_file(os.path.join(PUBLIC, "capture.html"))
         if path == "/buy" or path == "/wishlist":
