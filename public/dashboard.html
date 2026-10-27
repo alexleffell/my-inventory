@@ -1331,9 +1331,9 @@ async function identifyDetailItem() {
     const res = await api('/api/identify', { id: detailId });
     if (!res.ok) throw new Error(res.error || 'Identification failed');
     // Optimistically mark it queued; the /api/queue poll keeps it in sync and
-    // the item updates in place once the watcher agent writes the result.
+    // the item updates in place once the tagging agent writes the result.
     if (!QUEUE.some(q => q.id === detailId)) QUEUE.push({ id: detailId });
-    toast(res.already ? 'Already queued for identification' : 'Queued — the watcher will identify it');
+    toast(res.already ? 'Already queued for identification' : 'Queued — it is identified the next time you tag the queue');
   } catch (e) {
     toast(e.message || 'Identification failed', true);
   } finally {

@@ -4,10 +4,13 @@
 > upstream project this builds on. Like upstream, it is released under the GNU
 > General Public License version 3 (see [LICENSE](LICENSE)).
 
-A photo-driven inventory for small parts: electronics components, hardware,
-fasteners, craft supplies, anything you keep in labelled bags or bins. Snap a
-photo, set a quantity and a location, and it shows up on a live web dashboard you
-can share read-only and edit after logging in.
+A photo-driven inventory for a maker's tools, parts and materials. Every item
+lives in a container (a cabinet, a drawer inside it, a bin, a shelf), and
+containers sit in zones (work areas). Scan a container's QR label with your
+phone, photograph what's inside, and later ask a Claude Code session to "tag the
+queue": it identifies everything from the photos and files each item in the
+container you shot it in. The dashboard can be shared read-only and edited after
+logging in. The full plan is in [SPEC.md](SPEC.md).
 
 It is deliberately tiny: **one Python file, standard library only.** No Node, no
 pip, no database, no build step. The whole "stack" is `python3 server.py` and some
@@ -30,8 +33,15 @@ or with an LLM agent.
 
 ## Features
 
-- **Photo-first capture.** Multiple photos per item from any webcam (a phone over
-  macOS Continuity Camera works great). The first photo is the card thumbnail.
+- **Phone-first capture over plain HTTP.** The capture page uses the phone's own
+  camera app (a file input), so it works on home Wi-Fi with no certificates.
+  Several photos per item plus an optional note; the current container is always
+  shown, with a searchable picker as well as QR scanning.
+- **Containers, zones and QR labels.** Nest containers, assign zones, and print a
+  US letter sheet of QR labels; each label opens the capture page for its
+  container.
+- **On-demand tagging.** Nothing is identified on the server and it holds no AI
+  keys. Photos queue up until you ask a Claude Code session to tag the queue.
 - **Public dashboard, private editing.** Anyone can view; only a logged-in admin
   sees the edit controls. Auth is off until you create the first admin, so local
   dev needs no login.
@@ -71,7 +81,8 @@ That's it. No dependencies. Tested on Python 3.9+.
 
 - **Dashboard:** http://localhost:8770/dashboard
 - **Item permalink:** http://localhost:8770/i/<id>
-- **Capture:** http://localhost:8770/capture
+- **Capture:** http://localhost:8770/capture (from the phone: `http://<your-mac>.local:8770/capture`)
+- **Containers + labels:** http://localhost:8770/containers
 - **To buy:** http://localhost:8770/buy
 
 Change host/port with `INVENTORY_HOST` / `INVENTORY_PORT`.
@@ -93,18 +104,19 @@ Auth is base64, not encryption, so put it behind HTTPS for real use (see below).
 ## How it works
 
 ```
-your phone/webcam ──capture──> server.py ──> captures/cap-<ms>.png
-                                   │
-                                   ├─ data/inventory.json   (the items)
-                                   ├─ data/wishlist.json    (to-buy list)
-                                   └─ public/*.html         (the dashboard UI)
+phone ──scan label──> /c/<container> ──photos──> server.py ──> captures/cap-<ms>.jpg
+                                                    │           + one sidecar per item
+                                                    ├─ data/containers.json (zones, containers)
+                                                    ├─ data/inventory.json  (the items)
+                                                    └─ public/*.html        (the UI)
+Claude Code ──"tag the queue"──> GET /api/queue, reads the photos, POST /api/ingest
 ```
 
-The browser grabs frames with `getUserMedia` and POSTs them to the server, which
-saves a PNG per frame and a small JSON sidecar per confirmed item. The dashboard
-polls the JSON APIs and re-renders. Identification (turning a photo into a
-name/category/specs) is optional and can be done by hand in the edit modal or by an
-LLM agent watching for new sidecars. See [CLAUDE.md](CLAUDE.md) for the full
+The phone's camera app takes the photos; the page downscales them and uploads
+each one, then writes a small JSON sidecar per item with the container id and
+note. Nothing is identified until you ask a Claude Code session in this repo to
+"tag the queue" (the procedure lives in [CLAUDE.md](CLAUDE.md)). Names can also
+be typed by hand in the dashboard's edit modal. See CLAUDE.md for the full
 architecture, data model, and API table.
 
 ## Deploy

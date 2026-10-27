@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Print unprocessed uploads on the VPS (run with cwd = app root).
 
+For the later remote setup (Raspberry Pi / rented server) only. When the server
+runs on the laptop, the agent reads GET /api/queue instead ("Tag the queue" in
+CLAUDE.md). Sidecars carry a container id; this script never needs it.
+
 Two kinds, both need Claude to identify them:
   - review-*.json    : item added on the dashboard ("Add item") with photos
   - cap-*.json        : item confirmed on the capture page (files not yet logged)

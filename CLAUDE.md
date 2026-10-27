@@ -139,7 +139,7 @@ camera (`getUserMedia` needs HTTPS). The phone's own camera app does the work:
    photos and the note survive a page reload (`localStorage.captureDraft`),
    because iOS can reload the page while the camera app is open.
 4. Nothing is identified on the server. The queue waits until the user asks a
-   Claude Code session to **tag the queue** (see that section).
+   Claude Code session to **tag the queue** (see "Tag the queue" below).
 
 There is no quantity field: the agent reads the count off the label. The sidecar
 (not the raw photo) is the queue entry, so identification only happens once the
@@ -154,21 +154,95 @@ strip. Saving an edit sends the full `images` array via `POST /api/update`. When
 new list contains photos the item didn't have before, the server writes a
 `captures/review-<ms>.json` marker `{id, images, reason}`. The ✨ Identify button
 (`POST /api/identify`) writes the same marker with reason
-`identify requested from dashboard`. An agent watches for these to enrich or
+`identify requested from dashboard`. An agent picks these up to enrich or
 re-identify the item (fill specs/SKU from a label, resolve an `unconfirmed`
-value), then deletes the marker. Two trigger types share the `captures/*.json`
-watcher: `cap-*.json` (new item) and `review-*.json` (enrich/identify existing);
+value), then deletes the marker. Two queue entry types share `captures/*.json`: `cap-*.json` (new item) and `review-*.json` (enrich/identify existing);
 dispatch by filename prefix. The `reason` field says why the marker exists.
+These markers are handled the next time the user asks to **tag the queue**
+(below), or by a watcher in the later remote setup.
 
-### Optional: remote server + agent bridge
-Captures need a camera (usually a laptop/phone). The app can also run on a remote
-server as a shared read-only mirror. Items added on the remote create a nameless
-item + `review-*.json` there. `deploy/vps-bridge.sh` (run on the camera machine)
-polls the remote via `deploy/find_unprocessed.py`, pulls the new **photos only**,
-and lets a local agent identify them and write back. `deploy/sync.sh` does a
-two-way merge (unions inventory/pending by `id`, copies photos both ways). All of
-these read `VPS_HOST` / `VPS_USER` / `VPS_PATH` from the environment. Nothing is
-hardcoded.
+## Tag the queue (main agent path)
+
+Identification is on demand. Nothing runs in the background and the server holds
+no AI keys: photos queue up on the server, and when the user says **"tag the
+queue"** in a Claude Code session in this repo, the agent works through the whole
+backlog in one batch. Do exactly this:
+
+1. **Server and access.** `curl -s localhost:8770/api/summary` (port from
+   `INVENTORY_PORT`, default 8770). If nothing answers, start it in the background
+   (`python3 server.py`) and say so. Writes need admin only once an account exists:
+   `python3 server.py users` prints `auth: ENABLED` or `DISABLED`. When enabled,
+   send `-u "$INVENTORY_ADMIN_USER:$INVENTORY_ADMIN_PASS"` on every POST; if those
+   are unset, ask the user to export them. Never echo credentials.
+2. **Read the queue and the context.** `GET /api/queue` lists two kinds of entries:
+   - `status: "queued"`: a confirmed capture `{sidecar, images, container,
+     location, note, created}`, which becomes a NEW item.
+   - `status: "identifying"`: an existing item `{id, images, ...}` with a
+     `review-*.json` marker (the ✨ Identify button, or photos added in the edit
+     modal). It gets ENRICHED, not duplicated.
+
+   Also pull `GET /api/items` (every item, for duplicate checks),
+   `GET /api/summary` (existing category names to reuse) and
+   `GET /api/containers` (container paths for the report).
+3. **Identify each entry from its photos.** On this laptop the photos are plain
+   files: read `captures/<file>` directly (on a remote server fetch
+   `/captures/<file>`). Look at every photo of the item: the first is usually the
+   part, later ones are label close-ups. Fill in:
+   - `name`: short and human, most specific first ("Flush cutters, small",
+     "ESP32-S3 DevKitC-1"). The user's `note` is the strongest hint; their words
+     win for what the thing is called.
+   - `category`: reuse an existing category from `/api/summary` when one fits;
+     otherwise a short new one. (A fixed taxonomy arrives in Phase 2.)
+   - `quantity`: the printed pack count when a label shows one; otherwise 1, and
+     write `unconfirmed` next to the count in `notes`. Never guess a count.
+   - `condition` when visible ("New (sealed bag)", "Used").
+   - `notes`: manufacturer, model / part number, SKU, ratings and specs read off
+     the label, the user's note, and a dated line `Tagged <YYYY-MM-DD> from
+     capture <sidecar>`. Put `unconfirmed` beside anything you are not sure of
+     (the dashboard shows a "check" badge for it).
+   - `images`: all of the entry's photos, reordered so the one that best shows
+     the physical part comes FIRST (it is the card thumbnail).
+4. **Write the results back through the API, never by editing `inventory.json`.**
+   - New item, no duplicate: `POST /api/ingest` with `id` = the sidecar name
+     without `.json` (e.g. `cap-1780514673872`), the fields above, and
+     `container` copied **unchanged** from the queue entry (`null` for unfiled).
+     Location comes only from the scan or the user's pick, never from the photo:
+     do not move an item to another container because the photo "looks like" it
+     belongs there.
+   - Looks like an item that already exists (same part by name, SKU or photo,
+     in any container): do not create it and do not ask in chat. `POST
+     /api/pending {matches: [<similar ids>], candidate: {name, category,
+     quantity, container, condition, notes, images}}` so the user resolves it on
+     the dashboard (see "Duplicate handling").
+   - Enrich entry: `POST /api/ingest {id, <only the fields you improved>}`.
+     Do not change its `container`. Then delete that item's
+     `captures/review-*.json` marker(s).
+   - An entry whose photos are unreadable (blurry, dark, wrong file): leave it
+     queued and report it.
+   - If an item matches an open request on the to-buy list, mark it bought
+     (`POST /api/wishlist/resolve {id, status: "bought"}`).
+5. **Check.** `GET /api/queue` again: nothing `queued` should remain except
+   entries you deliberately left. Spot-check one written item with
+   `GET /api/items?ids=<id>`: name set, container and location path right.
+6. **Report** in chat, in this order:
+   - a table: name | container path | qty | category;
+   - **Unsure about:** every guess, with the reason ("count not printed, wrote 1";
+     "could be M3 or M2.5, label cut off");
+   - **Sent to the dashboard as possible duplicates:** what and why;
+   - **Left in the queue:** which captures and why.
+
+### Later: Raspberry Pi or rented server (watcher + bridge)
+The batch flow above assumes the server runs on the laptop the agent runs on.
+When the server moves to a Raspberry Pi or a rented server, the existing watcher
+scripts come back into play: `deploy/vps-bridge.sh` (run on the laptop) polls
+the remote via `deploy/find_unprocessed.py`, pulls the new **photos only**, and
+lets a local agent identify them and write back through the API. `deploy/sync.sh`
+does a two-way merge (unions inventory/pending by `id`, copies photos both ways).
+All of these read `VPS_HOST` / `VPS_USER` / `VPS_PATH` from the environment.
+Nothing is hardcoded. `find_unprocessed.py` reads sidecars and markers straight
+from disk and needs no change for containers (it never reads locations, and it
+handles `.jpg`). Known gap: `sync.sh` does not sync `data/containers.json` yet,
+and printed labels must point at the new host (`INVENTORY_BASE_URL`).
 
 ## API (all POST take/return JSON)
 
@@ -184,7 +258,7 @@ hardcoded.
 | `GET /api/items`     | Public. No args: one compact summary row per item for the WHOLE inventory (`id, name, category, quantity, container, location` path, `images` count, `models`, `undelivered`) via the pure `item_summary()` helper. `?ids=a,b,c`: the full records for those ids, in the order asked, plus a `missing` list. This is the agent entry point — there is no search endpoint (see "Agent access contract"). |
 | `GET /api/queue`     | Public: the identification queue. `status: "queued"` entries are unprocessed sidecars `{sidecar, images, container, location, note, created}`; `status: "identifying"` entries are nameless items or items with an outstanding `review-*.json` marker. |
 | `GET /api/identify/status` | Public: reports `{available: true, mode: "watcher"}` — identification runs via the watcher/bridge, no server-side API key. |
-| `POST /api/identify` | **Admin**: queue an item for (re-)identification. Writes a `captures/review-*.json` marker (reason `identify requested from dashboard`) for the watcher; dedupes if one is already pending. Never calls an LLM API itself. |
+| `POST /api/identify` | **Admin**: queue an item for (re-)identification. Writes a `captures/review-*.json` marker (reason `identify requested from dashboard`) for the next "tag the queue" run; dedupes if one is already pending. Never calls an LLM API itself. |
 | `POST /api/capture`  | `{image: dataURL}` → saves `cap-<ms>.jpg/.png/.webp` (type from the bytes; anything else is 400), returns `{file}`. |
 | `POST /api/confirm`  | `{files:[...], container, note}` → writes one sidecar for the item (container validated; empty = unfiled). |
 | `POST /api/ingest`   | Upsert an item by `id` (an agent's identified items). No review marker. |
@@ -205,13 +279,13 @@ hardcoded.
 `/api/ingest` (admin auth) is the safe way for an agent to write identified items.
 Prefer it over editing `inventory.json` directly, which races with the server.
 
-**Identify button (watcher-based).** The ✨ Identify button in an admin's item
+**Identify button (queue-based).** The ✨ Identify button in an admin's item
 detail modal does NOT call an LLM from the server. `POST /api/identify` drops a
 `captures/review-*.json` marker (reason `identify requested from dashboard`),
-i.e. the same trigger `deploy/find_unprocessed.py` + `deploy/vps-bridge.sh`
-already watch. The watching agent pulls the photos, identifies the part, writes
-the result back via `/api/update` (appending a dated change note), checks
-duplicates via `/api/pending`, and deletes the marker. While the marker exists
+which puts the item in `/api/queue` as `identifying`. The next "tag the queue"
+run (or the remote watcher, later) identifies it, writes the result back via
+`/api/ingest` (appending a dated change note), checks duplicates via
+`/api/pending`, and deletes the marker. While the marker exists
 the item shows in the "⏳ Identifying…" queue strip and the button reads
 "Identification queued"; the open detail modal updates in place when the agent
 writes the result. No `ANTHROPIC_API_KEY` or model env vars are needed.
