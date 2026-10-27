@@ -2,7 +2,7 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY server.py ./
+COPY server.py qrcodegen.py ./
 COPY public ./public
 COPY deploy/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

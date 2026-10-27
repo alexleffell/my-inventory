@@ -21,6 +21,8 @@ import hashlib
 import hmac
 import secrets
 import glob
+import socket
+import subprocess
 import threading
 from urllib.parse import urlparse, parse_qs, unquote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -633,6 +635,7 @@ OPENAPI_INTERNAL = {
     "/api/pending",           # duplicate decisions, resolved in the dashboard UI
     "/api/login",             # auth handshake for the dashboard
     "/api/setup",             # first-run admin creation
+    "/api/qr",                # QR label images for the label-sheet page
 }
 
 ITEM_SCHEMA = {
@@ -822,6 +825,46 @@ def openapi_spec(base_url):
     }
 
 
+_BASE_URL = None
+
+
+def label_base_url():
+    """The origin QR labels point at: INVENTORY_BASE_URL, else this machine's
+    mDNS name (`http://<LocalHostName>.local:<port>`), which a phone on the same
+    Wi-Fi resolves and which survives the laptop's IP address changing."""
+    global _BASE_URL
+    env = os.environ.get("INVENTORY_BASE_URL", "").strip().rstrip("/")
+    if env:
+        return env
+    if _BASE_URL is None:
+        name = ""
+        if sys.platform == "darwin":
+            try:
+                name = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True,
+                                      text=True, timeout=3).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                pass
+        name = name or socket.gethostname().split(".")[0] or "localhost"
+        _BASE_URL = "http://%s.local:%d" % (name, PORT)
+    return _BASE_URL
+
+
+def qr_svg(text, border=4):
+    """An SVG QR code for `text`: error correction level M (raised when it
+    fits), a 4-module quiet zone, one path of unit squares. Uses the vendored
+    qrcodegen.py (Project Nayuki, MIT, v1.8.0), imported here so the rest of the
+    server runs without it."""
+    import qrcodegen
+    qr = qrcodegen.QrCode.encode_text(text, qrcodegen.QrCode.Ecc.MEDIUM)
+    size = qr.get_size()
+    dark = " ".join("M%d,%dh1v1h-1z" % (x + border, y + border)
+                    for y in range(size) for x in range(size) if qr.get_module(x, y))
+    dim = size + 2 * border
+    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" '
+            'shape-rendering="crispEdges"><rect width="%d" height="%d" fill="#fff"/>'
+            '<path d="%s" fill="#000"/></svg>' % (dim, dim, dim, dim, dark))
+
+
 def write_review(item_id, images, reason):
     """Drop a review marker so Claude re-examines newly added photos for an
     existing item and enriches its info. Claude deletes the marker when done."""
@@ -840,6 +883,7 @@ CONTENT_TYPES = {
     ".mjs": "application/javascript; charset=utf-8",
     ".wasm": "application/wasm",
     ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml",
 }
 
 
@@ -914,7 +958,7 @@ class Handler(BaseHTTPRequestHandler):
         pages = {
             "/": "dashboard.html", "/dashboard": "dashboard.html",
             "/capture": "capture.html", "/buy": "wishlist.html", "/wishlist": "wishlist.html",
-            "/containers": "containers.html",
+            "/containers": "containers.html", "/labels": "labels.html",
         }
         name = pages.get(path)
         if not name and item_id_from_path(path):
@@ -951,6 +995,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_file(os.path.join(PUBLIC, "wishlist.html"))
         if path == "/containers":
             return self._serve_file(os.path.join(PUBLIC, "containers.html"))
+        if path == "/labels":
+            return self._serve_file(os.path.join(PUBLIC, "labels.html"))
         if path.startswith("/vendor/"):
             # Vendored static assets (the 3D viewer library + its wasm). No path
             # traversal: collapse the request and refuse anything outside public/vendor.
@@ -970,9 +1016,17 @@ class Handler(BaseHTTPRequestHandler):
             inv["items"] = [with_places(it, by_id) for it in inv.get("items", [])]
             return self._send(200, inv)
         if path == "/api/containers":
-            # Public: zones + containers, each with its path and item count.
-            return self._send(200, containers_view(load_containers(),
-                                                   load_inv().get("items", [])))
+            # Public: zones + containers, each with its path and item count,
+            # plus the origin printed labels point at.
+            view = containers_view(load_containers(), load_inv().get("items", []))
+            view["label_base_url"] = label_base_url()
+            return self._send(200, view)
+        if path == "/api/qr":
+            # A container's QR label: an SVG encoding <base>/c/<id>.
+            cid = (parse_qs(urlparse(self.path).query).get("container") or [""])[0]
+            if cid not in container_index(load_containers()):
+                return self._send(404, {"error": "container not found"})
+            return self._send(200, qr_svg("%s/c/%s" % (label_base_url(), cid)), "image/svg+xml")
         if path == "/api/identify/status":
             # Identification runs through the photo watcher/bridge (an agent
             # polling for review-*.json markers), not an API key on this server.

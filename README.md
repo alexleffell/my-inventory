@@ -169,3 +169,7 @@ step are a hard sell.
 
 [GPL-3.0](LICENSE). You can use, modify, and redistribute it; derivative works must
 stay open under the same license.
+
+`qrcodegen.py` is the QR Code generator library by Project Nayuki
+(https://www.nayuki.io/page/qr-code-generator-library), vendored unmodified under
+its MIT license (notice at the top of the file), which is compatible with GPL-3.0.

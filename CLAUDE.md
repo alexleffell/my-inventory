@@ -23,6 +23,7 @@ dashboard with that item's detail modal open (stable public permalink; the
 dashboard also pushStates here when you open an item). `/capture` → the capture
 page. `/c/<container-id>` → the capture page with that container preselected
 (the link a container's QR label encodes). `/containers` → container management (public read-only; editing needs admin).
+`/labels?ids=a,b` → printable QR label sheet for those containers.
 `/buy` (alias `/wishlist`) → the "To buy" page (purchase
 requests). Requires only Python 3 (tested on 3.9+). No build step.
 
@@ -82,6 +83,7 @@ The inventory can take real effort to build. Treat `data/`, `captures/` and
 
 ```
 server.py            # tiny stdlib HTTP server (ThreadingHTTPServer) on :8770
+qrcodegen.py         # vendored QR encoder (Project Nayuki, MIT, v1.8.0), unmodified; used by qr_svg()
 mcp_server.py        # optional MCP server (stdlib): list/detail reads, request_purchase,
                      # attach_item_model / get_item_model (3D models)
 public/
@@ -92,6 +94,7 @@ public/
                      # modal and per-item model attach/view/delete
   containers.html    # container management (/containers): zones, container tree grouped by
                      # zone, create/rename/nest/assign zone, select → print labels. Phone-first.
+  labels.html        # QR label sheet (/labels?ids=...): US letter, 4x5 tiles, name under each code
   wishlist.html      # the "To buy" page
   vendor/o3dv/       # vendored Online3DViewer (MIT) + occt-import-js WASM for the 3D
                      # viewer. Served at /vendor/ (stdlib static route). CDN-free.
@@ -167,6 +170,7 @@ hardcoded.
 | `GET /api/summary`   | Public overview: totals + category / container-path / zone breakdown + wishlist counts. |
 | `GET /api/containers` | Public: `{zones, containers}`; each container with `path`, `effective_zone`, `zone_name`, `item_count`, `children`. |
 | `POST /api/containers` | **Admin**: `{action: create\|update\|delete, id?, name, type, parent, zone}`. Rejects cycles and a zone on a nested container; delete is 409 while anything is inside. |
+| `GET /api/qr?container=<id>` | Public (internal to the label page): SVG QR code encoding `<label_base_url>/c/<id>`. |
 | `POST /api/zones`    | **Admin**: `{action: create\|rename\|delete, id?, name}`. |
 | `GET /api/items`     | Public. No args: one compact summary row per item for the WHOLE inventory (`id, name, category, quantity, container, location` path, `images` count, `models`, `undelivered`) via the pure `item_summary()` helper. `?ids=a,b,c`: the full records for those ids, in the order asked, plus a `missing` list. This is the agent entry point — there is no search endpoint (see "Agent access contract"). |
 | `GET /api/queue`     | Public: the identification queue. `status: "queued"` entries are unprocessed sidecars `{sidecar, images, container, location, note, created}`; `status: "identifying"` entries are nameless items or items with an outstanding `review-*.json` marker. |
@@ -380,6 +384,27 @@ also returns each model's public URL). Which items have models is visible in the
 `list_all_items` rows (`models` filenames), so there is no separate model-listing
 tool. `tests/test_models_roundtrip.py` covers the attach/list/download/delete
 cycle against a throwaway server copy.
+
+## QR labels
+
+Each container's label is a QR code of `<base>/c/<container-id>`; scanning it with
+the phone's normal camera opens the capture page with that container selected.
+`<base>` is `label_base_url()`: `INVENTORY_BASE_URL` if set, else
+`http://<LocalHostName>.local:<port>` (`scutil --get LocalHostName` on macOS,
+`socket.gethostname()` elsewhere). The `.local` mDNS name is the default because a
+printed label is permanent and the laptop's DHCP address is not. Moving the server
+(Raspberry Pi, rented server) means setting `INVENTORY_BASE_URL` there, and labels
+printed against the old host need reprinting, so pick a stable name early.
+
+`GET /api/qr?container=<id>` returns the SVG (`qr_svg()`: level M, 4-module quiet
+zone). The URLs encode as version 3 codes (29×29), which scan reliably at the
+1.35in printed size. `/labels?ids=...` (reached from the Containers page's Print
+labels bar) lays them out 20 per US letter sheet (`@page size: letter`, 0.5in
+margins, 4×5 tiles of 1.875×2in) with the name under each code and the short id
+below it as a typed fallback. It warns when the base URL is `localhost`.
+`qrcodegen.py` is vendored unmodified from Project Nayuki (MIT, GPL-compatible) and
+imported lazily inside `qr_svg()`. `tests/test_qr.py` parses the SVG back into
+modules and checks finder/timing patterns and the format information's BCH code.
 
 ## Duplicate handling (resolved in the WEB APP, never the terminal)
 
