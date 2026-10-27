@@ -111,6 +111,11 @@ def main():
         assert view()[cab["id"]]["zone"] is None and cab["id"] in view()
         assert srv.post("/api/zones", {"action": "delete", "id": deep})[0] == 404
 
+        # --- the management page is served (GET + HEAD for the self-reload poll)
+        code, headers, body = srv.request("/containers")
+        assert code == 200 and b"Containers" in body and "no-store" in headers["Cache-Control"]
+        assert srv.request("/containers", method="HEAD")[0] == 200
+
     print("PASS: containers, zones, nesting and container references on items")
 
 

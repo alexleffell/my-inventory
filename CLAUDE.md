@@ -22,7 +22,8 @@ controls + a 📷 Capture link appear after admin login). `/i/<id>` → the same
 dashboard with that item's detail modal open (stable public permalink; the
 dashboard also pushStates here when you open an item). `/capture` → the capture
 page. `/c/<container-id>` → the capture page with that container preselected
-(the link a container's QR label encodes). `/buy` (alias `/wishlist`) → the "To buy" page (purchase
+(the link a container's QR label encodes). `/containers` → container management (public read-only; editing needs admin).
+`/buy` (alias `/wishlist`) → the "To buy" page (purchase
 requests). Requires only Python 3 (tested on 3.9+). No build step.
 
 HTML pages are served with `Last-Modified` + `Cache-Control: no-store`, and the
@@ -30,7 +31,7 @@ server answers `HEAD` for the page routes. The dashboard polls `HEAD` on itself
 every 10s and self-reloads when `Last-Modified` changes (skipped while an edit
 modal is open) — deploys show up in open tabs without a manual refresh.
 
-The design system (shared across all three pages): black/orange palette as
+The design system (shared across every page): black/orange palette as
 semantic CSS custom properties in `:root` (surfaces `--bg/--panel*/--line*`,
 text `--text/--dim/--dim2/--faint`, accent families
 `--orange/--orange2/--ember/--orangefg/--orangebg/--orangeline` +
@@ -89,6 +90,8 @@ public/
   dashboard.html     # editable dashboard: sidebar (nav/stats/category filter), item detail
                      # modal, edit modal w/ inline camera, lightbox gallery, 3D model viewer
                      # modal and per-item model attach/view/delete
+  containers.html    # container management (/containers): zones, container tree grouped by
+                     # zone, create/rename/nest/assign zone, select → print labels. Phone-first.
   wishlist.html      # the "To buy" page
   vendor/o3dv/       # vendored Online3DViewer (MIT) + occt-import-js WASM for the 3D
                      # viewer. Served at /vendor/ (stdlib static route). CDN-free.

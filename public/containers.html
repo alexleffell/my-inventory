@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Containers · Maker Inventory</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🗄️</text></svg>" />
+<meta name="theme-color" content="#0d0b09" />
+<style>
+  :root {
+    color-scheme: dark;
+    /* surfaces — carbon black with a faint ember warmth */
+    --bg: #0d0b09; --panel: #14110e; --panel2: #1c1815; --panel3: #262019;
+    --line: #2b241d; --line2: #3e352b; --line3: #574a3b;
+    /* text — warm whites to match the ground */
+    --text: #f2ede5; --dim: #a89e8f; --dim2: #d3cabd; --faint: #776d5f;
+    /* orange — actions, selection, brand */
+    --orange: #f97b16; --orange2: #fb923c; --ember: #ea6a0e;
+    --orangefg: #ffbb77; --orangebg: #f97b1614; --orangeline: #f97b164d;
+    --on-orange: #201004;
+    /* amber — the physical storage layer (containers, zones): calmer than action orange */
+    --amber: #d99e4f; --amberfg: #e8bd7d; --amberbg: #d9973f12; --amberline: #c088364d;
+    /* status — semantic only, used sparingly */
+    --okfg: #4fc471; --okbg: #23863620; --okline: #2ea04352;
+    --red: #da3633; --redbg: #f8514922; --redfg: #ff8a82;
+    --warnfg: #e8c34e; --warnbg: #e3b34112; --warnline: #e3b34152;
+    --focus: #ffab5c;
+    /* the "datasheet" voice: every data value renders in mono */
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    /* elevation + radii */
+    --shadow-1: 0 1px 2px #0007, 0 6px 18px -8px #000a;
+    --shadow-2: 0 2px 8px #0009, 0 20px 48px -16px #000e;
+    --r-ctl: 10px; --r-card: 14px; --r-modal: 16px; --r-tag: 3px;
+  }
+  * { box-sizing: border-box; }
+  /* the ember strip — machine indicator light across the top of every page */
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 100;
+                 background: linear-gradient(90deg, var(--ember), var(--orange) 45%, #ffc078); pointer-events: none; }
+  html, body { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; font: 15px/1.5 -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text);
+         -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  button { font: inherit; cursor: pointer; color: inherit; }
+  input, select { font: inherit; font-size: 16px; }   /* 16px: no iOS zoom-on-focus */
+  ::placeholder { color: var(--faint); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  a { color: var(--orangefg); }
+  .page { max-width: 760px; margin: 0 auto; padding: 0 16px 110px; }
+
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 14px 0 6px;
+            padding-top: max(14px, env(safe-area-inset-top)); font-size: 14px; }
+  .topbar .brand { font-weight: 700; margin-right: auto; font-size: 16px; }
+  .topbar a { text-decoration: none; color: var(--dim2); min-height: 44px; display: inline-flex; align-items: center; }
+  .topbar a:hover { color: var(--text); }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 22px 0 10px; font-weight: 600;
+       display: flex; align-items: center; gap: 10px; }
+  h2 .grow { flex: 1; }
+  .note { color: var(--dim); font-size: 14px; margin: 4px 0 0; }
+  .note:empty { display: none; }
+
+  .btn { min-height: 44px; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2);
+         color: var(--text); padding: 9px 14px; display: inline-flex; align-items: center; justify-content: center;
+         gap: 7px; text-decoration: none; transition: border-color .15s, background .15s; white-space: nowrap; }
+  .btn:hover { border-color: var(--line3); background: var(--panel3); }
+  .btn.primary { background: var(--orange); border-color: var(--orange2); color: var(--on-orange); font-weight: 700; }
+  .btn.primary:hover { background: var(--orange2); }
+  .btn.danger { color: var(--redfg); border-color: var(--red); background: transparent; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--dim2); }
+  .btn.ghost:hover { border-color: var(--line2); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.sm { min-height: 36px; padding: 5px 11px; font-size: 13px; }
+
+  /* zones */
+  .zones { display: flex; flex-wrap: wrap; gap: 8px; }
+  .zone-chip { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 12px;
+               border-radius: 999px; border: 1px solid var(--amberline); background: var(--amberbg); color: var(--amberfg); }
+  button.zone-chip:hover { border-color: var(--amber); }
+  .zone-chip .n { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .empty { color: var(--faint); font-size: 14px; padding: 6px 0; }
+
+  /* container tree */
+  .search { width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2);
+            color: var(--text); padding: 10px 12px; margin-bottom: 6px; }
+  .group { margin-top: 14px; }
+  .group-h { display: flex; align-items: center; gap: 8px; padding: 6px 2px; color: var(--amberfg); font-weight: 600; }
+  .group-h .grow { flex: 1; }
+  .group-h .n { font-family: var(--mono); font-size: 12px; color: var(--dim); font-weight: 400; }
+  .rows { border: 1px solid var(--line); border-radius: var(--r-card); background: var(--panel); overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 6px 10px 6px 0; min-height: 56px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: none; }
+  .row .sel { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; flex: none; cursor: pointer; }
+  .row .sel input { width: 20px; height: 20px; accent-color: var(--orange); cursor: pointer; }
+  .row .main { flex: 1; min-width: 0; }
+  .row .name { font-weight: 600; overflow-wrap: anywhere; }
+  .row .meta { font-size: 12px; color: var(--dim); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row .type { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .03em;
+               border: 1px solid var(--line2); border-radius: var(--r-tag); padding: 0 5px; color: var(--dim2); }
+  .row .id { font-family: var(--mono); color: var(--faint); }
+  .row .acts { display: flex; gap: 6px; flex: none; }
+  .row.sub .main { border-left: 2px solid var(--line2); padding-left: 10px; }
+
+  /* selection bar */
+  .selbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: none; background: var(--panel2);
+            border-top: 1px solid var(--line2); box-shadow: var(--shadow-2); padding: 10px 16px;
+            padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .selbar.show { display: block; }
+  .selbar .in { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+  .selbar .count { flex: 1; font-variant-numeric: tabular-nums; color: var(--dim2); }
+
+  /* edit sheet */
+  .sheet-bg { position: fixed; inset: 0; z-index: 50; background: #000000b0; display: none; align-items: flex-end; justify-content: center; }
+  .sheet-bg.show { display: flex; }
+  .sheet { width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; background: var(--panel);
+           border: 1px solid var(--line2); border-bottom: none; border-radius: var(--r-modal) var(--r-modal) 0 0;
+           box-shadow: var(--shadow-2); padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  @media (min-width: 600px) { .sheet-bg { align-items: center; } .sheet { border-radius: var(--r-modal); border-bottom: 1px solid var(--line2); } }
+  .sheet h3 { margin: 0 0 14px; font-size: 18px; }
+  .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+  .field label { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+  .field input, .field select { width: 100%; min-height: 44px; border-radius: var(--r-ctl); border: 1px solid var(--line2);
+                                background: var(--panel2); color: var(--text); padding: 9px 12px; }
+  .field select:disabled { opacity: .55; }
+  .field .help { font-size: 12px; color: var(--faint); }
+  .sheet .err { color: var(--redfg); font-size: 14px; min-height: 20px; margin-bottom: 8px; }
+  .sheet .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .sheet .btns .grow { flex: 1; }
+
+  @media (max-width: 520px) {
+    .row .acts .cap-label { display: none; }
+    h2 .btn { padding: 5px 10px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="topbar" aria-label="Pages">
+    <span class="brand">🗄️ Containers</span>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/capture">Capture</a>
+  </nav>
+  <p class="note" id="mode-note"></p>
+
+  <h2><span class="grow">Zones</span><button type="button" class="btn sm edit-only" id="add-zone">＋ Zone</button></h2>
+  <div class="zones" id="zones"></div>
+
+  <h2><span class="grow">Containers</span><button type="button" class="btn sm primary edit-only" id="add-container">＋ Container</button></h2>
+  <input class="search" id="search" type="search" placeholder="Filter by name, type, zone or id" aria-label="Filter containers" autocomplete="off">
+  <div id="tree"></div>
+</div>
+
+<div class="selbar" id="selbar" role="region" aria-label="Selected containers">
+  <div class="in">
+    <span class="count" id="selcount">0 selected</span>
+    <button type="button" class="btn ghost" id="selclear">Clear</button>
+    <button type="button" class="btn primary" id="print">🖨 Print labels</button>
+  </div>
+</div>
+
+<div class="sheet-bg" id="c-sheet">
+  <form class="sheet" role="dialog" aria-modal="true" aria-labelledby="c-title" id="c-form">
+    <h3 id="c-title">New container</h3>
+    <div class="field"><label for="c-name">Name</label>
+      <input id="c-name" required maxlength="80" placeholder="e.g. Red cabinet, Drawer 3" autocomplete="off"></div>
+    <div class="field"><label for="c-type">Type</label><select id="c-type"></select></div>
+    <div class="field"><label for="c-parent">Inside</label><select id="c-parent"></select>
+      <span class="help">Nest a drawer inside its cabinet, a box on its shelf.</span></div>
+    <div class="field"><label for="c-zone">Zone</label><select id="c-zone"></select>
+      <span class="help" id="c-zone-help"></span></div>
+    <div class="err" id="c-err" role="alert"></div>
+    <div class="btns">
+      <button type="submit" class="btn primary">Save</button>
+      <button type="button" class="btn" data-close>Cancel</button>
+      <span class="grow"></span>
+      <button type="button" class="btn danger" id="c-delete">Delete</button>
+    </div>
+  </form>
+</div>
+
+<div class="sheet-bg" id="z-sheet">
+  <form class="sheet" role="dialog" aria-modal="true" aria-labelledby="z-title" id="z-form">
+    <h3 id="z-title">New zone</h3>
+    <div class="field"><label for="z-name">Name</label>
+      <input id="z-name" required maxlength="60" placeholder="e.g. Electronics bench, Deep storage" autocomplete="off"></div>
+    <div class="err" id="z-err" role="alert"></div>
+    <div class="btns">
+      <button type="submit" class="btn primary">Save</button>
+      <button type="button" class="btn" data-close>Cancel</button>
+      <span class="grow"></span>
+      <button type="button" class="btn danger" id="z-delete">Delete</button>
+    </div>
+  </form>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let authHeader = '';
+try { authHeader = localStorage.getItem('authHeader') || sessionStorage.getItem('authHeader') || ''; } catch (e) {}
+const jsonHeaders = () => authHeader
+  ? { 'Content-Type': 'application/json', 'Authorization': authHeader }
+  : { 'Content-Type': 'application/json' };
+// Same list as CONTAINER_TYPES in server.py.
+const TYPES = ['cabinet', 'drawer', 'small-parts drawer', 'divided box', 'bin', 'bag', 'tray',
+               'shelf', 'wall/pegboard', 'rack', 'case', 'other'];
+
+let zones = [], containers = [], canEdit = false;
+const selected = new Set();
+const byId = id => containers.find(c => c.id === id);
+const kidsOf = id => containers.filter(c => (c.parent || null) === id).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+async function api(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+  return j;
+}
+async function load() {
+  const j = await (await fetch('/api/containers', { cache: 'no-store' })).json();
+  zones = j.zones || []; containers = j.containers || [];
+  for (const id of [...selected]) if (!byId(id)) selected.delete(id);
+  render();
+}
+
+// ---- render ---------------------------------------------------------------
+function render() {
+  document.querySelectorAll('.edit-only').forEach(el => { el.hidden = !canEdit; });
+  const zcount = id => containers.filter(c => c.effective_zone === id).length;
+  $('zones').innerHTML = zones.length
+    ? zones.map(z => canEdit
+        ? `<button type="button" class="zone-chip" data-zone="${esc(z.id)}" title="Rename or delete">${esc(z.name)} <span class="n">${zcount(z.id)}</span></button>`
+        : `<span class="zone-chip">${esc(z.name)} <span class="n">${zcount(z.id)}</span></span>`).join('')
+    : `<div class="empty">No zones yet. A zone is a work area: electronics bench, finishing area, deep storage.</div>`;
+
+  const q = $('search').value.trim().toLowerCase();
+  const hit = c => [c.name, c.type, c.path, c.zone_name, c.id].some(v => (v || '').toLowerCase().includes(q));
+  // A container shows when it or anything inside it matches the filter.
+  const shows = c => !q || hit(c) || kidsOf(c.id).some(shows);
+  const rowsFor = (c, depth) => !shows(c) ? '' : rowHtml(c, depth) + kidsOf(c.id).map(k => rowsFor(k, depth + 1)).join('');
+  const tops = kidsOf(null);
+  const groups = [...zones.map(z => ({ id: z.id, name: z.name, tops: tops.filter(c => c.zone === z.id) })),
+                  { id: '', name: 'No zone', tops: tops.filter(c => !c.zone) }];
+  let html = '';
+  for (const g of groups) {
+    const rows = g.tops.map(c => rowsFor(c, 0)).join('');
+    if (!rows) continue;
+    html += `<section class="group"><div class="group-h"><span class="grow">${esc(g.name)}</span>
+      <span class="n">${containers.filter(c => (c.effective_zone || '') === g.id).length}</span>
+      <button type="button" class="btn sm ghost" data-selzone="${esc(g.id)}">Select all</button></div>
+      <div class="rows">${rows}</div></section>`;
+  }
+  $('tree').innerHTML = html || (containers.length
+    ? `<div class="empty">Nothing matches “${esc(q)}”.</div>`
+    : `<div class="empty">No containers yet.${canEdit ? ' Add the cabinets, drawers, bins and shelves you store things in.' : ''}</div>`);
+  renderSelbar();
+}
+function rowHtml(c, depth) {
+  return `<div class="row${depth ? ' sub' : ''}" style="padding-left:${depth * 18}px">
+    <label class="sel"><input type="checkbox" data-sel="${esc(c.id)}" ${selected.has(c.id) ? 'checked' : ''} aria-label="Select ${esc(c.name)} for labels"></label>
+    <div class="main"><div class="name">${esc(c.name)}</div>
+      <div class="meta"><span class="type">${esc(c.type)}</span><span>${c.item_count} item${c.item_count === 1 ? '' : 's'}</span><span class="id">${esc(c.id)}</span></div></div>
+    <div class="acts">
+      <a class="btn sm" href="/c/${encodeURIComponent(c.id)}" title="Capture into ${esc(c.name)}">📷<span class="cap-label"> Capture</span></a>
+      ${canEdit ? `<button type="button" class="btn sm" data-edit="${esc(c.id)}">Edit</button>` : ''}
+    </div></div>`;
+}
+function renderSelbar() {
+  $('selbar').classList.toggle('show', selected.size > 0);
+  $('selcount').textContent = `${selected.size} selected`;
+}
+
+$('search').addEventListener('input', render);
+$('tree').addEventListener('change', e => {
+  const id = e.target.dataset.sel; if (!id) return;
+  e.target.checked ? selected.add(id) : selected.delete(id);
+  renderSelbar();
+});
+$('tree').addEventListener('click', e => {
+  const ed = e.target.closest('[data-edit]');
+  if (ed) return openContainer(byId(ed.dataset.edit));
+  const sz = e.target.closest('[data-selzone]');
+  if (sz) {
+    containers.filter(c => (c.effective_zone || '') === sz.dataset.selzone).forEach(c => selected.add(c.id));
+    render();
+  }
+});
+$('selclear').addEventListener('click', () => { selected.clear(); render(); });
+$('print').addEventListener('click', () => {
+  // Labels print in tree order, so a cabinet's drawers come out together.
+  const order = [];
+  const walk = c => { if (selected.has(c.id)) order.push(c.id); kidsOf(c.id).forEach(walk); };
+  kidsOf(null).forEach(walk);
+  location.href = '/labels?ids=' + order.map(encodeURIComponent).join(',');
+});
+
+// ---- sheets ---------------------------------------------------------------
+let lastFocus = null;
+function openSheet(id, focusId) {
+  lastFocus = document.activeElement;
+  $(id).classList.add('show');
+  setTimeout(() => $(focusId).focus(), 30);
+}
+function closeSheets() {
+  document.querySelectorAll('.sheet-bg.show').forEach(s => s.classList.remove('show'));
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheets));
+document.querySelectorAll('.sheet-bg').forEach(bg => bg.addEventListener('click', e => { if (e.target === bg) closeSheets(); }));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheets(); });
+
+// container sheet
+let editing = null;   // container being edited, or null for a new one
+function descendants(id) {
+  const out = new Set([id]);
+  let grew = true;
+  while (grew) { grew = false; for (const c of containers) if (c.parent && out.has(c.parent) && !out.has(c.id)) { out.add(c.id); grew = true; } }
+  return out;
+}
+function syncZoneField() {
+  const parent = $('c-parent').value;
+  $('c-zone').disabled = !!parent;
+  const p = parent && byId(parent);
+  $('c-zone-help').textContent = p ? `Inherits ${p.zone_name ? '“' + p.zone_name + '”' : 'no zone'} from ${p.path}.` : '';
+  if (p) $('c-zone').value = p.effective_zone || '';
+}
+function openContainer(c) {
+  editing = c || null;
+  $('c-title').textContent = c ? 'Edit container' : 'New container';
+  $('c-name').value = c ? c.name : '';
+  $('c-type').innerHTML = TYPES.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  $('c-type').value = c ? c.type : 'drawer';
+  const blocked = c ? descendants(c.id) : new Set();
+  $('c-parent').innerHTML = `<option value="">Nothing (top level)</option>` + containers
+    .filter(x => !blocked.has(x.id)).sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }))
+    .map(x => `<option value="${esc(x.id)}">${esc(x.path)}</option>`).join('');
+  $('c-parent').value = c ? (c.parent || '') : '';
+  $('c-zone').innerHTML = `<option value="">No zone</option>` + zones.map(z => `<option value="${esc(z.id)}">${esc(z.name)}</option>`).join('');
+  $('c-zone').value = c ? (c.zone || '') : (zones.length === 1 ? zones[0].id : '');
+  syncZoneField();
+  $('c-delete').hidden = !c;
+  $('c-err').textContent = '';
+  openSheet('c-sheet', 'c-name');
+}
+$('c-parent').addEventListener('change', syncZoneField);
+$('add-container').addEventListener('click', () => openContainer(null));
+$('c-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const parent = $('c-parent').value || null;
+  const body = { name: $('c-name').value.trim(), type: $('c-type').value, parent, zone: parent ? null : ($('c-zone').value || null) };
+  try {
+    await api('/api/containers', editing ? { action: 'update', id: editing.id, ...body } : { action: 'create', ...body });
+    closeSheets(); await load();
+  } catch (err) { $('c-err').textContent = err.message; }
+});
+$('c-delete').addEventListener('click', async () => {
+  if (!editing || !confirm(`Delete “${editing.path}”? Its QR labels will stop working.`)) return;
+  try { await api('/api/containers', { action: 'delete', id: editing.id }); selected.delete(editing.id); closeSheets(); await load(); }
+  catch (err) { $('c-err').textContent = err.message + (/not empty/.test(err.message) ? '. Move its items and containers out first.' : ''); }
+});
+
+// zone sheet
+let editingZone = null;
+function openZone(z) {
+  editingZone = z || null;
+  $('z-title').textContent = z ? 'Edit zone' : 'New zone';
+  $('z-name').value = z ? z.name : '';
+  $('z-delete').hidden = !z;
+  $('z-err').textContent = '';
+  openSheet('z-sheet', 'z-name');
+}
+$('add-zone').addEventListener('click', () => openZone(null));
+$('zones').addEventListener('click', e => {
+  const b = e.target.closest('[data-zone]'); if (b) openZone(zones.find(z => z.id === b.dataset.zone));
+});
+$('z-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('z-name').value.trim();
+  try {
+    await api('/api/zones', editingZone ? { action: 'rename', id: editingZone.id, name } : { action: 'create', name });
+    closeSheets(); await load();
+  } catch (err) { $('z-err').textContent = err.message; }
+});
+$('z-delete').addEventListener('click', async () => {
+  if (!editingZone || !confirm(`Delete zone “${editingZone.name}”? Its containers stay, with no zone.`)) return;
+  try { await api('/api/zones', { action: 'delete', id: editingZone.id }); closeSheets(); await load(); }
+  catch (err) { $('z-err').textContent = err.message; }
+});
+
+// ---- start: editing needs the admin login (or no accounts at all) ---------
+(async () => {
+  try {
+    const r = await fetch('/api/login', { method: 'POST', headers: jsonHeaders(), body: '{}' });
+    canEdit = !!(await r.json()).ok;
+  } catch (e) { canEdit = false; }
+  $('mode-note').innerHTML = canEdit ? '' : 'View only. <a href="/dashboard">Log in on the dashboard</a> to add or edit containers.';
+  try { await load(); } catch (e) { $('tree').innerHTML = `<div class="empty">Couldn't load containers: ${esc(e.message)}</div>`; }
+})();
+</script>
+</body>
+</html>

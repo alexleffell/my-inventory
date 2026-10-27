@@ -914,6 +914,7 @@ class Handler(BaseHTTPRequestHandler):
         pages = {
             "/": "dashboard.html", "/dashboard": "dashboard.html",
             "/capture": "capture.html", "/buy": "wishlist.html", "/wishlist": "wishlist.html",
+            "/containers": "containers.html",
         }
         name = pages.get(path)
         if not name and item_id_from_path(path):
@@ -948,6 +949,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         if path == "/buy" or path == "/wishlist":
             return self._serve_file(os.path.join(PUBLIC, "wishlist.html"))
+        if path == "/containers":
+            return self._serve_file(os.path.join(PUBLIC, "containers.html"))
         if path.startswith("/vendor/"):
             # Vendored static assets (the 3D viewer library + its wasm). No path
             # traversal: collapse the request and refuse anything outside public/vendor.
