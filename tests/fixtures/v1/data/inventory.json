@@ -1,0 +1,13 @@
+{
+  "items": [
+    {"id": "cap-100", "name": "Active 5V Buzzer", "category": "Audio", "quantity": 5,
+     "location": "Bag 1", "notes": "Single place.", "images": ["cap-100.png"]},
+    {"id": "item-200", "name": "Resistor 10k", "category": "Passives", "quantity": 5,
+     "location": "Bag 1",
+     "stock": [{"location": "Bag 1", "quantity": 3}, {"location": "Shelf A", "quantity": 2}]},
+    {"id": "item-300", "name": "Loose jumper wires", "category": "Wire", "quantity": 1,
+     "location": ""},
+    {"id": "item-400", "name": "ESP32 dev board", "category": "Modules", "quantity": 2,
+     "condition": "New (ordered)", "undelivered": true, "notes": "Ordered, not filed yet."}
+  ]
+}

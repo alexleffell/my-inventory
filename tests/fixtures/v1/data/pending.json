@@ -1,0 +1,6 @@
+{
+  "pending": [
+    {"pending_id": "pend-1", "matches": ["cap-100"],
+     "candidate": {"name": "Buzzer", "quantity": 2, "location": "bag 1", "images": ["cap-500.png"]}}
+  ]
+}

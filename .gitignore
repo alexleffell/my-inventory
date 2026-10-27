@@ -23,10 +23,12 @@ data/*.tmp
 # admin credentials - NEVER commit
 deploy/admin.env
 
-# Example item photos (captures/*.png) ARE tracked so the demo renders out of
-# the box. Transient capture sidecars / review markers are not.
-captures/*.json
-captures/.DS_Store
+# Your inventory and photos are personal data: never committed. server.py
+# creates empty data files on first start; scripts/backup.sh backs them up.
+data/inventory.json
+data/containers.json
+captures/*
+!captures/.gitkeep
 
 # 3D model files attached to items (personal data, can be large)
 models/

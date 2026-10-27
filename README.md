@@ -13,9 +13,8 @@ It is deliberately tiny: **one Python file, standard library only.** No Node, no
 pip, no database, no build step. The whole "stack" is `python3 server.py` and some
 JSON files. It runs the same on a laptop or a $5 VPS.
 
-The data in this repo (`data/inventory.json` + the photos in `captures/`) is a real
-inventory of ~60 electronics parts, kept as a working example so the app renders
-with real content out of the box.
+The repo ships with no inventory data: `python3 server.py` starts you on an empty
+inventory, and your items and photos stay out of git (see "Data and backups").
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -153,8 +152,8 @@ missing when it was there under another name.
 
 ## Data and backups
 
-- `data/inventory.json`: the items (tracked here as the example).
-- `captures/*.png`: item photos (the example photos are included).
+- `data/inventory.json`: the items. Created empty on first start; gitignored.
+- `captures/`: item photos and capture sidecars. Gitignored.
 - `data/users.json`, `data/*.bak`, `data/pending.json`, `data/wishlist.json`: local
   / secret state, gitignored.
 - `scripts/backup.sh` pulls `data/` + `captures/` from a running server to a local

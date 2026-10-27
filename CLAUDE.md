@@ -71,8 +71,10 @@ The inventory can take real effort to build. Treat `data/`, `captures/` and
   `$BACKUP_DEST/latest`.
 - Rules for any agent/script: back up before destructive ops; never `rm -rf`
   `data`/`captures`; never `git checkout`/`git clean` over them without a backup.
-  `data/users.json`, `data/*.bak`, `data/pending.json`, `data/wishlist.json` are
-  gitignored (secrets / local state).
+  `data/inventory.json`, `data/containers.json`, `captures/*`, `data/users.json`,
+  `data/*.bak`, `data/pending.json`, `data/wishlist.json` are gitignored: the
+  inventory and photos are personal data and never go into a commit. The repo
+  ships empty; tests run against `tests/fixtures/` in a throwaway copy.
 
 ## Architecture
 
