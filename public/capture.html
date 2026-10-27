@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Maker Inventory — Capture</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>📸</text></svg>" />
 <meta name="theme-color" content="#0d0b09" />
@@ -18,7 +18,7 @@
     --orange: #f97b16; --orange2: #fb923c; --ember: #ea6a0e;
     --orangefg: #ffbb77; --orangebg: #f97b1614; --orangeline: #f97b164d;
     --on-orange: #201004;
-    /* amber — the physical storage layer (bags, bins, locations): calmer than action orange */
+    /* amber — the physical storage layer (containers, zones): calmer than action orange */
     --amber: #d99e4f; --amberfg: #e8bd7d; --amberbg: #d9973f12; --amberline: #c088364d;
     /* status — semantic only, used sparingly */
     --okfg: #4fc471; --okbg: #23863620; --okline: #2ea04352;
@@ -36,629 +36,469 @@
   /* the ember strip — machine indicator light across the top of every page */
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 100;
                  background: linear-gradient(90deg, var(--ember), var(--orange) 45%, #ffc078); pointer-events: none; }
-  html, body { touch-action: manipulation; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
+  html, body { -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0; font: 15px/1.5 -apple-system, system-ui, sans-serif;
-    background: var(--bg); color: var(--text); padding: 20px;
-    padding: max(20px, env(safe-area-inset-top)) 20px 20px;
+    margin: 0; font: 16px/1.5 -apple-system, system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
     -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
   button { font: inherit; cursor: pointer; color: inherit; }
-  input, select, textarea { font: inherit; }
+  input { font: inherit; font-size: 16px; }   /* 16px: no iOS zoom-on-focus */
   ::placeholder { color: var(--faint); }
-  ::selection { background: #7c3a12; color: #fff; }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  a { color: var(--orangefg); }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   }
+  .page { max-width: 560px; margin: 0 auto; padding: 0 16px 40px; }
 
-  /* identification queue */
-  .queue-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px;
-                 padding: 10px 13px; border: 1px solid var(--warnline); background: var(--warnbg); border-radius: var(--r-card); }
-  .queue-strip:empty { display: none; }
-  .queue-strip .qhead { font-size: 13px; color: var(--warnfg); display: flex; align-items: center; gap: 7px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .queue-strip .spin { width: 12px; height: 12px; border: 2px solid var(--warnline); border-top-color: var(--warnfg); border-radius: 50%; animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .queue-strip .qitem { display: flex; align-items: center; gap: 5px; }
-  .queue-strip .qitem img { width: 38px; height: 38px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line2); }
-  .queue-strip .qstat { font-size: 11px; color: var(--dim); }
+  /* top bar */
+  .topbar { display: flex; align-items: center; gap: 14px; padding: 14px 0 10px;
+            padding-top: max(14px, env(safe-area-inset-top)); font-size: 14px; }
+  .topbar .brand { font-weight: 700; margin-right: auto; }
+  .topbar a { text-decoration: none; color: var(--dim2); min-height: 44px; display: inline-flex; align-items: center; }
+  .topbar a:hover { color: var(--text); }
 
-  /* mobile: bigger touch targets, full-width controls */
-  @media (max-width: 620px) {
-    body { padding: 12px; padding-top: max(12px, env(safe-area-inset-top)); }
-    h1 { font-size: 16px; }
-    .controls { gap: 8px; }
-    .controls select { flex: 1 1 100%; }
-    .controls button { flex: 1; padding: 13px 12px; font-size: 16px; }
-    button.primary, .additem, #additem { min-height: 48px; }
-    input, select, textarea { font-size: 16px; }  /* avoid iOS zoom-on-focus */
-    .shot img { width: 76px; height: 76px; }
-    #additem, #discard { flex: 1; min-height: 48px; }
-  }
-  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
-  h1 { font-size: 18px; margin: 0; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); margin: 0 0 10px; }
-  a { color: var(--orangefg); }
-  .wrap { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 28px; align-items: start; }
-  @media (max-width: 880px) { .wrap { grid-template-columns: 1fr; } }
-  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  select, input, textarea {
-    border-radius: var(--r-ctl); border: 1px solid var(--line2);
-    background: var(--panel2); color: var(--text); padding: 9px 12px;
-  }
-  .btn { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 14px;
-         display: inline-flex; align-items: center; justify-content: center; gap: 7px; text-decoration: none;
-         transition: border-color .15s, background .15s, transform .08s; }
+  /* current container — sticky so it is always visible while shooting */
+  .where { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 8px 0 12px; }
+  .where-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+                background: var(--amberbg); border: 1px solid var(--amberline); border-radius: var(--r-card); }
+  .where-card.none { background: var(--panel); border-color: var(--line2); border-style: dashed; }
+  .where-text { flex: 1; min-width: 0; }
+  .where-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .where-name { font-size: 20px; font-weight: 700; color: var(--amberfg); line-height: 1.25;
+                overflow-wrap: anywhere; }
+  .where-card.none .where-name { color: var(--dim2); font-weight: 600; font-size: 17px; }
+  .where-meta { font-size: 13px; color: var(--dim); overflow-wrap: anywhere; }
+  .where-meta .zone { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .03em;
+                      color: var(--amberfg); border: 1px solid var(--amberline); border-radius: var(--r-tag); padding: 0 5px; margin-right: 6px; }
+
+  .btn { min-height: 44px; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2);
+         color: var(--text); padding: 9px 14px; display: inline-flex; align-items: center; justify-content: center;
+         gap: 7px; text-decoration: none; transition: border-color .15s, background .15s, transform .08s; }
   .btn:hover { border-color: var(--line3); background: var(--panel3); }
-  .btn:active { transform: scale(.96); }
+  .btn:active { transform: scale(.97); }
   .btn.primary { background: var(--orange); border-color: var(--orange2); color: var(--on-orange); font-weight: 700; }
   .btn.primary:hover { background: var(--orange2); }
-  button.primary:disabled { opacity: .45; cursor: default; }
-  .stage { position: relative; }
-  video { width: 100%; border-radius: var(--r-card); background: #000; display: block; }
-  .flash { position: absolute; inset: 0; background: #fff; opacity: 0; border-radius: var(--r-card); pointer-events: none; }
-  .flash.go { animation: f .25s ease; }
-  @keyframes f { from { opacity: .8; } to { opacity: 0; } }
-  .meta { margin: 8px 0; color: var(--dim2); }
-  .meta b { color: var(--text); }
-  .hint { color: var(--dim); font-size: 13px; }
-  .cam-controls { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin: 4px 0 2px; }
-  .cam-controls:empty { display: none; }
-  .cam-controls .ctl { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--dim2); }
-  .cam-controls input[type=range] { width: 150px; accent-color: var(--orange); }
-  .cam-controls .toggle { border: 1px solid var(--line2); background: var(--panel2); border-radius: var(--r-ctl); padding: 6px 11px; color: var(--text); }
-  .cam-controls .toggle.on { background: var(--orange); border-color: var(--orange2); color: var(--on-orange); font-weight: 600; }
-  .cam-controls .nocaps { color: var(--faint); font-size: 12px; }
-  kbd { background: var(--panel2); border: 1px solid var(--line2); border-radius: 5px; padding: 1px 6px; }
+  .btn:disabled { opacity: .45; cursor: default; transform: none; }
 
-  /* current-item staging */
-  .curitem { margin-top: 22px; background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r-card); padding: 14px; }
-  .curitem.empty { border-style: dashed; opacity: .8; }
-  .strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; min-height: 8px; }
-  .shot { position: relative; }
-  .shot img { width: 92px; height: 92px; object-fit: cover; border-radius: var(--r-ctl); border: 1px solid var(--line2); display: block; }
-  .shot .x { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%;
-             background: var(--red); color: #fff; border: none; font-size: 12px; line-height: 1; padding: 0; }
-  .shot .num { position: absolute; bottom: 4px; left: 4px; background: #0d0b09cc; border-radius: 5px; padding: 0 5px; font-size: 11px; font-variant-numeric: tabular-nums; }
-  .nostrip { color: var(--faint); font-size: 13px; padding: 14px 0; }
-  .fields { display: flex; flex-direction: column; gap: 9px; }
-  .qtyrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .qtyrow label { font-size: 11px; color: var(--dim); min-width: 42px; }
-  .qtyrow input[type=number] { width: 78px; text-align: center; font-variant-numeric: tabular-nums; }
-  .note { width: 100%; }
-  .actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
-  .status-line { color: var(--dim); font-size: 12px; }
-  #shotcount, #itemstatus { font-variant-numeric: tabular-nums; }
+  /* banners (unknown container, login needed, errors) */
+  .banner { margin: 0 0 12px; padding: 10px 13px; border-radius: var(--r-card); font-size: 14px;
+            border: 1px solid var(--warnline); background: var(--warnbg); color: var(--warnfg); }
+  .banner.err { border-color: var(--red); background: var(--redbg); color: var(--redfg); }
+  .banner:empty { display: none; }
 
-  /* live inventory */
-  .inv { display: flex; flex-direction: column; gap: 8px; max-height: 72vh; overflow: auto; }
-  .item { display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); padding: 8px 10px; }
-  .item .thumb { position: relative; width: 44px; height: 44px; flex: none; }
-  .item img { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; background:#070605; }
-  .item .badge { position: absolute; right: -4px; bottom: -4px; background: var(--orange); color: var(--on-orange); font-weight: 700; border-radius: 6px; font-size: 10px; padding: 0 4px; font-variant-numeric: tabular-nums; }
-  .item .n { font-weight: 600; font-size: 14px; }
-  .item .c { font-size: 12px; color: var(--dim); }
-  .item .q { margin-left: auto; background: var(--amberbg); color: var(--amberfg); border: 1px solid var(--amberline); font-family: var(--mono); font-weight: 600; border-radius: 7px; padding: 2px 9px; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .totals { display: flex; gap: 18px; margin-bottom: 10px; }
-  .totals b { font-size: 19px; display: block; font-variant-numeric: tabular-nums; }
-  .totals span { color: var(--dim); font-size: 11px; text-transform: uppercase; }
-  .invempty { color: var(--dim); font-size: 13px; padding: 20px 0; }
+  /* the shutter: a label wrapping a file input, so the phone's camera app opens */
+  .shoot { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+           width: 100%; min-height: 150px; border-radius: var(--r-modal); cursor: pointer; user-select: none;
+           background: var(--orange); color: var(--on-orange); border: 1px solid var(--orange2);
+           box-shadow: var(--shadow-1); transition: background .15s, transform .08s; }
+  .shoot:hover { background: var(--orange2); }
+  .shoot:active { transform: scale(.985); }
+  .shoot .big { font-size: 24px; font-weight: 800; }
+  .shoot .small { font-size: 13px; font-weight: 600; opacity: .8; }
+  .shoot.disabled { opacity: .45; pointer-events: none; }
+  .shoot:focus-within { outline: 2px solid var(--focus); outline-offset: 3px; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .lib { display: flex; justify-content: center; margin: 10px 0 18px; }
+  .lib label { font-size: 14px; color: var(--dim2); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+               min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px; }
+  .lib label.disabled { opacity: .45; pointer-events: none; }
+  .lib label:focus-within { outline: 2px solid var(--focus); border-radius: var(--r-ctl); }
 
-  /* pending duplicate decisions */
-  .pending-decisions { display: flex; flex-direction: column; gap: 12px; margin-bottom: 18px; }
-  .pending-decisions:empty { display: none; }
-  .dup-card { border: 1px solid var(--warnline); background: var(--warnbg); border-radius: var(--r-card); padding: 14px 16px; }
-  .dup-head { font-size: 15px; margin-bottom: 9px; }
-  .dup-head b { color: var(--warnfg); }
-  .dup-cmp { display: flex; gap: 20px; flex-wrap: wrap; color: var(--dim2); font-size: 14px; margin-bottom: 10px; }
-  .dup-cmp b { color: var(--text); }
-  .dup-thumbs { display: flex; gap: 6px; margin-bottom: 11px; }
-  .dup-thumbs img { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line2); }
-  .dup-btns { display: flex; gap: 8px; flex-wrap: wrap; }
-  .dup-btns button { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 8px 13px; }
-  .dup-btns button.go { background: var(--orange); border-color: var(--orange2); color: var(--on-orange); font-weight: 700; }
-  .dup-btns button.skip { margin-left: auto; color: var(--dim); border-color: transparent; background: transparent; }
-  .dup-btns button.skip:hover { color: var(--text); border-color: var(--line2); }
-  .dup-btns button:disabled { opacity: .5; cursor: default; }
-  .dup-edit { display: flex; flex-direction: column; gap: 8px; margin-bottom: 11px; }
-  .dup-edit .d-name { width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 11px; font-weight: 600; }
-  .dup-edit .d-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .dup-edit .d-row label { font-size: 12px; color: var(--dim); }
-  .dup-edit .d-row input { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 7px 10px; }
-  .dup-edit .d-qty { width: 72px; text-align: center; font-variant-numeric: tabular-nums; }
-  .dup-edit .d-loc { width: 130px; }
-  .dup-matches { margin-bottom: 11px; }
-  .m-title { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
-  .m-row { display: flex; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid #ffffff12; flex-wrap: wrap; }
-  .m-info { flex: 1; font-size: 13px; color: var(--dim2); min-width: 170px; font-variant-numeric: tabular-nums; }
-  .m-row button { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 6px 11px; }
-  .m-row button:hover { border-color: var(--line3); }
-  .m-row button.go { background: var(--orange); border-color: var(--orange2); color: var(--on-orange); font-weight: 700; }
-  .m-row button:disabled { opacity: .5; cursor: default; }
-  .dup-status { margin-top: 10px; font-size: 13px; min-height: 18px; font-variant-numeric: tabular-nums; }
-  .dup-status.ok { color: var(--okfg); font-weight: 600; }
-  .dup-status.err { color: var(--redfg); }
+  /* the item being built */
+  .item { background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r-card); padding: 14px; }
+  .item h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 0 0 10px; font-weight: 600; }
+  .strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .strip:empty::before { content: "No photos yet. Take one of the item, then a close-up of any label."; grid-column: 1 / -1;
+                         color: var(--faint); font-size: 14px; padding: 6px 0; }
+  .shot { position: relative; aspect-ratio: 1; }
+  .shot img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--r-ctl); border: 1px solid var(--line2); display: block; background: #070605; }
+  .shot .num { position: absolute; bottom: 4px; left: 4px; background: #0d0b09cc; border-radius: 5px; padding: 0 6px;
+               font-size: 12px; font-variant-numeric: tabular-nums; }
+  .shot .x { position: absolute; top: -8px; right: -8px; width: 30px; height: 30px; border-radius: 50%;
+             background: var(--red); color: #fff; border: 2px solid var(--bg); font-size: 15px; line-height: 1; padding: 0; }
+  .shot .state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+                 border-radius: var(--r-ctl); background: #0d0b09aa; font-size: 12px; color: var(--dim2); text-align: center; padding: 4px; }
+  .shot.failed .state { background: #3a0d0bcc; color: var(--redfg); cursor: pointer; }
+  .spin { width: 20px; height: 20px; border: 2px solid var(--line3); border-top-color: var(--orangefg); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .note { width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2);
+          color: var(--text); padding: 11px 12px; margin-bottom: 12px; }
+  .done { width: 100%; min-height: 54px; font-size: 17px; }
+  .status { min-height: 22px; margin-top: 8px; font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .status.ok { color: var(--okfg); font-weight: 600; }
+  .status.err { color: var(--redfg); }
 
-  /* zoom & crop modal */
-  .crop-overlay { position: fixed; inset: 0; background: #000000cc; backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 90; padding: 20px; }
-  .crop-overlay.show { display: flex; }
-  .crop-box { background: var(--panel); border: 1px solid var(--line2); border-radius: var(--r-modal); padding: 16px; max-width: 92vw; box-shadow: var(--shadow-2); }
-  .crop-title { font-size: 14px; color: var(--dim2); margin-bottom: 10px; }
-  #crop-canvas { width: min(440px, 82vw); height: auto; aspect-ratio: 4/3; background: #000; border-radius: var(--r-ctl); cursor: grab; touch-action: none; display: block; }
-  #crop-canvas:active { cursor: grabbing; }
-  .crop-controls { display: flex; align-items: center; gap: 10px; margin: 12px 0; color: var(--dim2); font-size: 13px; }
-  .crop-controls input[type=range] { flex: 1; accent-color: var(--orange); }
-  .crop-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-  .crop-actions button { border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 9px 13px; }
-  .crop-actions button.primary { background: var(--orange); border-color: var(--orange2); color: var(--on-orange); font-weight: 700; }
+  /* running queue count */
+  .queue { display: flex; gap: 10px; margin-top: 16px; }
+  .queue div { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-card); padding: 10px 12px; }
+  .queue b { display: block; font-size: 22px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .queue span { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+  .hint { color: var(--faint); font-size: 13px; margin-top: 14px; }
+
+  /* container picker sheet */
+  .sheet-bg { position: fixed; inset: 0; z-index: 50; background: #000000b0; display: none; align-items: flex-end; justify-content: center; }
+  .sheet-bg.show { display: flex; }
+  .sheet { width: 100%; max-width: 560px; max-height: 88vh; display: flex; flex-direction: column;
+           background: var(--panel); border: 1px solid var(--line2); border-bottom: none;
+           border-radius: var(--r-modal) var(--r-modal) 0 0; box-shadow: var(--shadow-2);
+           padding-bottom: env(safe-area-inset-bottom); }
+  @media (min-width: 600px) { .sheet-bg { align-items: center; } .sheet { border-radius: var(--r-modal); border-bottom: 1px solid var(--line2); } }
+  .sheet-head { display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px; }
+  .sheet-head h2 { margin: 0; font-size: 17px; flex: 1; }
+  .sheet-search { margin: 0 14px 10px; }
+  .sheet-search input { width: 100%; border-radius: var(--r-ctl); border: 1px solid var(--line2); background: var(--panel2);
+                        color: var(--text); padding: 11px 12px; }
+  .sheet-list { overflow-y: auto; padding: 0 8px 12px; -webkit-overflow-scrolling: touch; }
+  .group-h { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); padding: 12px 8px 4px; }
+  .pick { display: flex; width: 100%; text-align: left; align-items: center; gap: 10px; min-height: 48px; padding: 8px;
+          background: none; border: 1px solid transparent; border-radius: var(--r-ctl); }
+  .pick:hover, .pick:focus-visible { background: var(--panel2); border-color: var(--line2); }
+  .pick.on { border-color: var(--amberline); background: var(--amberbg); }
+  .pick .pn { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .pick .pn small { display: block; color: var(--dim); font-size: 12px; }
+  .pick .pt { font-family: var(--mono); font-size: 11px; color: var(--faint); text-transform: uppercase; }
+  .sheet-empty { color: var(--dim); font-size: 14px; padding: 14px 8px; }
 </style>
 </head>
 <body>
-  <header>
-    <h1>📸 Maker Inventory — Capture</h1>
-    <a href="/dashboard">← Back to dashboard</a>
-  </header>
+<div class="page">
+  <nav class="topbar" aria-label="Pages">
+    <span class="brand">📸 Capture</span>
+    <a href="/dashboard">Dashboard</a>
+    <a href="/containers">Containers</a>
+  </nav>
 
-  <div id="queue-strip" class="queue-strip" role="status" aria-live="polite"></div>
-  <div id="pending-decisions" class="pending-decisions"></div>
-
-  <div class="wrap">
-    <!-- LEFT: camera + current item -->
-    <div>
-      <div class="controls">
-        <select id="cam" title="Choose camera" aria-label="Choose camera"></select>
-        <button class="btn primary" id="snap">📸 Capture photo</button>
-        <button class="btn ghost" id="upload-btn">📁 Upload</button>
-        <input type="file" id="file-input" accept="image/*" aria-label="Upload photos" hidden>
+  <div class="where">
+    <div class="where-card none" id="where-card">
+      <div class="where-text">
+        <div class="where-label">Shooting into</div>
+        <div class="where-name" id="where-name">No container chosen</div>
+        <div class="where-meta" id="where-meta">Scan a container's label, or pick one.</div>
       </div>
-      <div class="stage">
-        <video id="v" autoplay playsinline muted></video>
-        <div class="flash" id="flash"></div>
-      </div>
-      <p class="meta" id="status" role="status" aria-live="polite">Starting camera…</p>
-      <div id="cam-controls" class="cam-controls"></div>
-      <p class="hint">
-        Take <b>as many photos as you like for one item</b> (label front/back, the
-        part itself) — press <kbd>Capture</kbd> or <kbd>Space</kbd> for each. Then set
-        quantity/location and click <b>Add to inventory</b> to log them as one entry.
-      </p>
-
-      <div class="curitem empty" id="curitem">
-        <h2>Current item — <span id="shotcount">0</span> photo(s)</h2>
-        <div class="strip" id="strip"><div class="nostrip" id="nostrip">No photos yet — press Capture.</div></div>
-        <div class="fields">
-          <div class="qtyrow">
-            <label for="qty">Qty</label>
-            <button class="btn ghost" data-d="-1" aria-label="Decrease quantity">−</button>
-            <input type="number" min="1" class="qty" id="qty" placeholder="auto">
-            <button class="btn ghost" data-d="1" aria-label="Increase quantity">+</button>
-            <span class="status-line">blank = read pack count off the label</span>
-          </div>
-          <div class="qtyrow">
-            <label for="ctype">Where</label>
-            <select id="ctype"><option value="Bag">Bag</option><option value="Bin">Bin</option><option value="Tray">Tray</option></select>
-            <input type="number" min="1" id="cnum" placeholder="#" aria-label="Location number" style="width:78px">
-          </div>
-          <input class="note" id="note" placeholder="Note / part name (optional)" aria-label="Note or part name">
-          <div class="actions">
-            <button class="btn primary" id="additem" disabled>✓ Add to inventory</button>
-            <button class="btn ghost" id="discard">Discard</button>
-            <span class="status-line" id="itemstatus" role="status" aria-live="polite"></span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- RIGHT: live inventory -->
-    <div>
-      <h2 style="margin-top:0">Live inventory</h2>
-      <div class="totals">
-        <div><b id="t-items">0</b><span>items</span></div>
-        <div><b id="t-units">0</b><span>units</span></div>
-        <div><b id="t-cats">0</b><span>categories</span></div>
-      </div>
-      <div class="inv" id="inv"></div>
-      <div class="invempty" id="invempty">Nothing logged yet.</div>
+      <button type="button" class="btn" id="change">Change</button>
     </div>
   </div>
 
-<div class="crop-overlay" id="crop-overlay">
-  <div class="crop-box" role="dialog" aria-modal="true" aria-labelledby="crop-title">
-    <div class="crop-title" id="crop-title">Zoom &amp; crop — drag to position, slider/scroll to zoom</div>
-    <canvas id="crop-canvas" width="800" height="600"></canvas>
-    <div class="crop-controls">
-      <label for="crop-zoom">🔍 Zoom</label>
-      <input type="range" id="crop-zoom" min="1" max="4" step="0.01" value="1">
+  <div class="banner" id="banner" role="status" aria-live="polite"></div>
+
+  <label class="shoot disabled" id="shoot">
+    <span class="big">📷 Take photo</span>
+    <span class="small" id="shoot-sub">Choose a container first</span>
+    <input type="file" id="camera" class="visually-hidden" accept="image/*" capture="environment" disabled>
+  </label>
+  <div class="lib">
+    <label class="disabled" id="lib-label">or add from the photo library
+      <input type="file" id="library" class="visually-hidden" accept="image/*" multiple disabled>
+    </label>
+  </div>
+
+  <section class="item" aria-labelledby="item-h">
+    <h2 id="item-h">This item: <span id="shotcount">0</span> photo(s)</h2>
+    <div class="strip" id="strip"></div>
+    <input class="note" id="note" maxlength="200" placeholder="Note (optional): “the good flush cutters”" aria-label="Note for this item">
+    <button type="button" class="btn primary done" id="done" disabled>✓ Done, queue item</button>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </section>
+
+  <div class="queue" aria-live="polite">
+    <div><b id="q-all">–</b><span>queued</span></div>
+    <div><b id="q-here">–</b><span>queued here</span></div>
+    <div><b id="q-session">0</b><span>this session</span></div>
+  </div>
+  <p class="hint">One item at a time: shoot it (plus a label close-up if it has one), tap Done, next item.
+    Nothing is identified here. Later, ask Claude Code to “tag the queue”.</p>
+</div>
+
+<div class="sheet-bg" id="sheet-bg">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+    <div class="sheet-head">
+      <h2 id="sheet-h">Choose a container</h2>
+      <button type="button" class="btn" id="sheet-close">Close</button>
     </div>
-    <div class="crop-actions">
-      <button class="btn" id="crop-cancel">Cancel</button>
-      <button class="btn" id="crop-full">Use full image</button>
-      <button class="btn primary" id="crop-confirm">Crop &amp; use</button>
-    </div>
+    <div class="sheet-search"><input id="search" type="search" placeholder="Type to search: name, zone, id" aria-label="Search containers" autocomplete="off"></div>
+    <div class="sheet-list" id="sheet-list"></div>
   </div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-
-// ---- shared zoom & crop modal (used by camera capture and file upload) ----
-const CROP_W = 800, CROP_H = 600;
-let cimg = null, cscale = 1, cmin = 1, cox = 0, coy = 0, cConfirm = null, cSrc = null;
-function cclamp() {
-  const w = cimg.width * cscale, h = cimg.height * cscale;
-  cox = Math.min(0, Math.max(CROP_W - w, cox));
-  coy = Math.min(0, Math.max(CROP_H - h, coy));
-}
-function cdraw() {
-  const cv = $('crop-canvas'), x = cv.getContext('2d');
-  x.fillStyle = '#000'; x.fillRect(0, 0, CROP_W, CROP_H);
-  cclamp();
-  x.imageSmoothingQuality = 'high';
-  x.drawImage(cimg, cox, coy, cimg.width * cscale, cimg.height * cscale);
-}
-function openCropper(src, onConfirm) {
-  cSrc = src; cConfirm = onConfirm;
-  cimg = new Image();
-  cimg.onload = () => {
-    cmin = Math.max(CROP_W / cimg.width, CROP_H / cimg.height); // cover
-    cscale = cmin;
-    cox = (CROP_W - cimg.width * cscale) / 2;
-    coy = (CROP_H - cimg.height * cscale) / 2;
-    $('crop-zoom').value = 1;
-    cdraw();
-    $('crop-overlay').classList.add('show');
-  };
-  cimg.src = src;
-}
-function czoomTo(mult, ax, ay) {
-  const ns = cmin * mult, old = cscale;
-  cox = ax - (ax - cox) * (ns / old);
-  coy = ay - (ay - coy) * (ns / old);
-  cscale = ns; cdraw();
-}
-$('crop-zoom').addEventListener('input', () => czoomTo(+$('crop-zoom').value, CROP_W / 2, CROP_H / 2));
-(function () {
-  const cv = $('crop-canvas');
-  let drag = false, lx = 0, ly = 0;
-  const f = () => CROP_W / cv.clientWidth;
-  const down = e => { drag = true; const p = e.touches ? e.touches[0] : e; lx = p.clientX; ly = p.clientY; };
-  const move = e => { if (!drag) return; const p = e.touches ? e.touches[0] : e; cox += (p.clientX - lx) * f(); coy += (p.clientY - ly) * f(); lx = p.clientX; ly = p.clientY; cdraw(); e.preventDefault(); };
-  const up = () => { drag = false; };
-  cv.addEventListener('mousedown', down); window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
-  cv.addEventListener('touchstart', down, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', up);
-  cv.addEventListener('wheel', e => {
-    e.preventDefault();
-    const mult = Math.min(4, Math.max(1, (cscale / cmin) * (e.deltaY < 0 ? 1.1 : 0.9)));
-    $('crop-zoom').value = mult; czoomTo(mult, CROP_W / 2, CROP_H / 2);
-  }, { passive: false });
-})();
-$('crop-cancel').addEventListener('click', () => $('crop-overlay').classList.remove('show'));
-$('crop-full').addEventListener('click', () => { $('crop-overlay').classList.remove('show'); if (cConfirm) cConfirm(cSrc); });
-$('crop-confirm').addEventListener('click', () => {
-  const url = $('crop-canvas').toDataURL('image/png');
-  $('crop-overlay').classList.remove('show');
-  if (cConfirm) cConfirm(url);
-});
-const v = $('v'), camSel = $('cam'), statusEl = $('status');
-// Use the admin session from the dashboard login (same origin) so writes work on
-// the deployed (remote) site, where capture/confirm/resolve require admin.
-const authHeader = localStorage.getItem('authHeader') || sessionStorage.getItem('authHeader') || '';
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Storage can throw (private mode, blocked site data): every access is guarded.
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+// Writes reuse the admin login from the dashboard (same origin).
+let authHeader = '';
+try { authHeader = localStorage.getItem('authHeader') || sessionStorage.getItem('authHeader') || ''; } catch (e) {}
 const jsonHeaders = () => authHeader
   ? { 'Content-Type': 'application/json', 'Authorization': authHeader }
   : { 'Content-Type': 'application/json' };
-let stream = null;
-let currentFiles = [];   // photos accumulated for the item being built
-// Single shared "last used location" (string like "Bag 3"), also used by the dashboard.
-function parseLoc(s){ const m = /^(Bag|Bin|Tray)\s+(.+)$/i.exec(s || ''); return m ? { type: m[1][0].toUpperCase()+m[1].slice(1).toLowerCase(), num: m[2] } : { type: 'Bag', num: '' }; }
-const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-// Populate the dropdown and make its selection reflect the device ACTUALLY
-// streaming (activeId) — never force a particular camera here.
-async function populateCams(activeId) {
-  const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-  camSel.innerHTML = '';
-  cams.forEach((c, i) => {
-    const o = document.createElement('option');
-    o.value = c.deviceId; o.textContent = c.label || ('Camera ' + (i + 1));
-    camSel.appendChild(o);
+const MAX_EDGE = 2000;       // long edge after downscaling; label text stays legible
+const UNFILED = '';          // explicit "no container" choice; null = not chosen yet
+
+let containers = [], zones = [];
+let current = null;          // container id, UNFILED, or null
+// shots: {key, preview (object URL), data (JPEG data URL until uploaded),
+//         file (server name once uploaded), state: 'up' | 'ok' | 'failed'}
+let shots = [];
+let sessionCount = 0;
+
+// ---- current container ------------------------------------------------------
+const byId = id => containers.find(c => c.id === id);
+function setBanner(html, err) { const b = $('banner'); b.className = 'banner' + (err ? ' err' : ''); b.innerHTML = html || ''; }
+
+function setCurrent(id, remember = true) {
+  current = id;
+  if (remember && id !== null) {
+    store.set('lastContainer', id);
+    if (id) store.set('recentContainers', [id, ...store.get('recentContainers', []).filter(x => x !== id)].slice(0, 5));
+  }
+  saveDraft();
+  renderWhere();
+}
+
+function renderWhere() {
+  const card = $('where-card'), c = current ? byId(current) : null;
+  card.classList.toggle('none', !c);
+  if (c) {
+    const parent = c.path.includes(' › ') ? c.path.slice(0, c.path.lastIndexOf(' › ')) : '';
+    $('where-name').textContent = c.name;
+    $('where-meta').innerHTML = (c.zone_name ? `<span class="zone">${esc(c.zone_name)}</span>` : '')
+      + esc(parent ? 'in ' + parent : c.type);
+  } else if (current === UNFILED) {
+    $('where-name').textContent = 'Unfiled';
+    $('where-meta').textContent = 'Items go in with no container. You can file them later.';
+  } else {
+    $('where-name').textContent = 'No container chosen';
+    $('where-meta').textContent = "Scan a container's label, or pick one.";
+  }
+  const ready = current !== null;
+  $('shoot').classList.toggle('disabled', !ready);
+  $('lib-label').classList.toggle('disabled', !ready);
+  $('camera').disabled = $('library').disabled = !ready;
+  $('shoot-sub').textContent = ready ? 'Opens the camera' : 'Choose a container first';
+  renderButtons();
+  renderQueueCounts();
+}
+
+// ---- picker sheet -----------------------------------------------------------
+let lastFocus = null;
+function openPicker() {
+  lastFocus = document.activeElement;
+  $('search').value = '';
+  renderPicker();
+  $('sheet-bg').classList.add('show');
+  setTimeout(() => $('search').focus(), 30);
+}
+function closePicker() {
+  $('sheet-bg').classList.remove('show');
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+function pickRow(c) {
+  return `<button type="button" class="pick${c.id === current ? ' on' : ''}" data-id="${esc(c.id)}">
+    <span class="pn">${esc(c.name)}${c.path !== c.name ? `<small>${esc(c.path)}</small>` : ''}</span>
+    <span class="pt">${esc(c.type)}</span></button>`;
+}
+function renderPicker() {
+  const q = $('search').value.trim().toLowerCase();
+  const match = c => !q || [c.name, c.path, c.zone_name, c.id, c.type].some(v => (v || '').toLowerCase().includes(q));
+  const list = containers.filter(match).sort((a, b) => a.path.localeCompare(b.path));
+  let html = '';
+  if (!containers.length) {
+    html = `<div class="sheet-empty">No containers yet. <a href="/containers">Create them on the Containers page</a>, then come back.</div>`;
+  } else {
+    const recent = q ? [] : store.get('recentContainers', []).map(byId).filter(Boolean);
+    if (recent.length) html += `<div class="group-h">Recent</div>` + recent.map(pickRow).join('');
+    const groups = [...zones.map(z => [z.name, list.filter(c => c.effective_zone === z.id)]),
+                    ['No zone', list.filter(c => !c.effective_zone)]];
+    for (const [name, rows] of groups) {
+      if (rows.length) html += `<div class="group-h">${esc(name)}</div>` + rows.map(pickRow).join('');
+    }
+    if (!list.length) html += `<div class="sheet-empty">No container matches “${esc(q)}”.</div>`;
+  }
+  if (!q || 'unfiled'.includes(q)) {
+    html += `<div class="group-h">Other</div><button type="button" class="pick${current === UNFILED ? ' on' : ''}" data-id="">
+      <span class="pn">Unfiled<small>No container: file these items later</small></span></button>`;
+  }
+  $('sheet-list').innerHTML = html;
+}
+$('change').addEventListener('click', openPicker);
+$('sheet-close').addEventListener('click', closePicker);
+$('sheet-bg').addEventListener('click', e => { if (e.target === $('sheet-bg')) closePicker(); });
+$('search').addEventListener('input', renderPicker);
+$('search').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { const first = $('sheet-list').querySelector('.pick'); if (first) first.click(); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('sheet-bg').classList.contains('show')) closePicker(); });
+$('sheet-list').addEventListener('click', e => {
+  const b = e.target.closest('.pick'); if (!b) return;
+  setCurrent(b.dataset.id);
+  setBanner('');
+  closePicker();
+});
+
+// ---- photos: downscale in the browser, upload at once -------------------------
+function loadImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => resolve({ img, url });
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("can't read this photo format")); };
+    img.src = url;
   });
-  if (activeId) camSel.value = activeId;
-  return cams;
 }
-async function start(deviceId) {
-  if (stream) stream.getTracks().forEach(t => t.stop());
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' }, audio: false });
-  v.srcObject = stream;
-  const activeId = stream.getVideoTracks()[0].getSettings().deviceId;
-  const cams = await populateCams(activeId);
-  // Prefer the iPhone, but ONLY on the initial auto-start (no explicit choice).
-  // Labels/ids are only known after permission, so the first stream is the
-  // default (laptop) camera; switch to the iPhone if we just found it.
-  if (!deviceId) {
-    const ip = cams.find(c => /iphone|continuity/i.test(c.label));
-    if (ip && ip.deviceId && ip.deviceId !== activeId) return start(ip.deviceId);
-  }
-  buildCamControls(stream.getVideoTracks()[0]);
-  statusEl.textContent = 'Ready. Capture one or more photos of a part.';
-}
-
-// Expose manual focus / zoom / torch when the camera advertises them.
-function buildCamControls(track) {
-  const box = document.getElementById('cam-controls');
-  box.innerHTML = '';
-  const caps = track.getCapabilities ? track.getCapabilities() : {};
-  const cur = track.getSettings ? track.getSettings() : {};
-  const apply = obj => track.applyConstraints({ advanced: [obj] })
-    .catch(e => { statusEl.textContent = 'Camera control failed: ' + e.message; });
-
-  // Manual / near focus
-  if (caps.focusMode && caps.focusMode.includes('manual') && caps.focusDistance) {
-    const fd = caps.focusDistance; // min = nearest
-    const near = document.createElement('button');
-    near.className = 'btn toggle'; near.textContent = '🔍 Near focus';
-    const range = document.createElement('input');
-    range.type = 'range'; range.min = fd.min; range.max = fd.max; range.step = fd.step || (fd.max - fd.min) / 100;
-    range.value = cur.focusDistance ?? fd.min; range.style.display = 'none'; range.setAttribute('aria-label', 'Focus distance');
-    near.addEventListener('click', () => {
-      const on = near.classList.toggle('on');
-      if (on) { apply({ focusMode: 'manual', focusDistance: fd.min }); range.value = fd.min; range.style.display = ''; }
-      else { apply({ focusMode: 'continuous' }); range.style.display = 'none'; }
-    });
-    range.addEventListener('input', () => apply({ focusMode: 'manual', focusDistance: +range.value }));
-    const wrap = document.createElement('div'); wrap.className = 'ctl';
-    wrap.append(near, range); box.appendChild(wrap);
-  } else if (caps.focusMode && caps.focusMode.includes('manual')) {
-    // manual focus but no distance range exposed
-    const b = document.createElement('button'); b.className = 'btn toggle'; b.textContent = '🔍 Lock focus (near)';
-    b.addEventListener('click', () => { const on = b.classList.toggle('on'); apply({ focusMode: on ? 'manual' : 'continuous' }); });
-    const w = document.createElement('div'); w.className = 'ctl'; w.appendChild(b); box.appendChild(w);
-  }
-
-  // Zoom
-  if (caps.zoom && caps.zoom.max > caps.zoom.min) {
-    const z = caps.zoom;
-    const range = document.createElement('input');
-    range.type = 'range'; range.min = z.min; range.max = z.max; range.step = z.step || (z.max - z.min) / 100;
-    range.value = cur.zoom ?? z.min; range.setAttribute('aria-label', 'Camera zoom');
-    range.addEventListener('input', () => apply({ zoom: +range.value }));
-    const wrap = document.createElement('div'); wrap.className = 'ctl';
-    const lbl = document.createElement('span'); lbl.textContent = '🔭 Zoom';
-    wrap.append(lbl, range); box.appendChild(wrap);
-  }
-
-  // Torch (light)
-  if (caps.torch) {
-    const b = document.createElement('button'); b.className = 'btn toggle'; b.textContent = '💡 Light';
-    b.addEventListener('click', () => { const on = b.classList.toggle('on'); apply({ torch: on }); });
-    const w = document.createElement('div'); w.className = 'ctl'; w.appendChild(b); box.appendChild(w);
-  }
-
-  if (!box.children.length) {
-    box.innerHTML = '<span class="nocaps">This camera exposes no manual focus/zoom controls. Tip: zoom isn\'t available, so back the part off to the lens\'s minimum focus distance and fill the frame.</span>';
-  }
-}
-camSel.addEventListener('change', () => start(camSel.value));
-
-// init the Where fields from the last used location
-const initLoc = parseLoc(localStorage.getItem('lastLocation'));
-$('ctype').value = initLoc.type;
-$('cnum').value = initLoc.num;
-
-async function snap() {
-  if (!stream) return;
-  const s = stream.getVideoTracks()[0].getSettings();
-  const w = s.width || v.videoWidth || 1280, h = s.height || v.videoHeight || 720;
+function toJpegDataUrl(img) {
+  const scale = Math.min(1, MAX_EDGE / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(v, 0, 0, w, h);
-  const dataUrl = canvas.toDataURL('image/png');
-  const flash = $('flash');
-  flash.classList.remove('go'); void flash.offsetWidth; flash.classList.add('go');
-  openCropper(dataUrl, saveImage);   // zoom/crop, then save
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);   // browsers apply EXIF orientation to <img>
+  return canvas.toDataURL('image/jpeg', 0.85);
 }
-
-// Save a (possibly cropped) image to the current item.
-async function saveImage(dataUrl) {
-  statusEl.textContent = 'Saving photo…';
+async function upload(shot) {
+  shot.state = 'up'; renderStrip();
   try {
-    const r = await fetch('/api/capture', {
-      method: 'POST', headers: jsonHeaders(),
-      body: JSON.stringify({ image: dataUrl })
-    });
+    const r = await fetch('/api/capture', { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ image: shot.data }) });
+    if (r.status === 401 || r.status === 403) { needLogin(); throw new Error('login needed'); }
     const j = await r.json();
-    if (j.ok) { currentFiles.push(j.file); renderStrip(); statusEl.textContent = 'Photo added to current item.'; }
-    else statusEl.textContent = 'Save failed: ' + (j.error || 'unknown');
-  } catch (e) { statusEl.textContent = 'Network error: ' + e.message; }
+    if (!j.ok) throw new Error(j.error || 'upload failed');
+    shot.file = j.file; shot.state = 'ok'; shot.data = null;
+  } catch (e) {
+    shot.state = 'failed'; shot.error = e.message;
+  }
+  saveDraft(); renderStrip();
 }
-
-// Upload an image file from disk → crop → save.
-$('upload-btn').addEventListener('click', () => $('file-input').click());
-$('file-input').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (file) { const reader = new FileReader(); reader.onload = () => openCropper(reader.result, saveImage); reader.readAsDataURL(file); }
-  e.target.value = '';
-});
+async function addFiles(files) {
+  for (const file of files) {
+    const shot = { key: Math.random().toString(36).slice(2), state: 'up' };
+    shots.push(shot); renderStrip();
+    try {
+      const { img, url } = await loadImage(file);
+      shot.preview = url;
+      shot.data = toJpegDataUrl(img);
+    } catch (e) {
+      shot.state = 'failed'; shot.error = e.message; shot.unreadable = true; renderStrip(); continue;
+    }
+    upload(shot);
+  }
+}
+for (const id of ['camera', 'library']) {
+  $(id).addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+}
 
 function renderStrip() {
-  const strip = $('strip');
-  $('shotcount').textContent = currentFiles.length;
-  $('curitem').classList.toggle('empty', currentFiles.length === 0);
-  $('additem').disabled = currentFiles.length === 0;
-  if (!currentFiles.length) { strip.innerHTML = '<div class="nostrip">No photos yet — press Capture.</div>'; return; }
-  strip.innerHTML = currentFiles.map((f, i) => `
-    <div class="shot">
-      <img src="/captures/${esc(f)}" alt="Captured photo ${i+1}">
-      <span class="num">${i+1}</span>
-      <button class="btn x" data-rm="${esc(f)}" title="Remove" aria-label="Remove photo ${i+1}">×</button>
-    </div>`).join('');
+  $('shotcount').textContent = shots.length;
+  $('strip').innerHTML = shots.map((s, i) => {
+    const src = s.preview || (s.file ? '/captures/' + encodeURIComponent(s.file) : '');
+    const state = s.state === 'up' ? `<span class="state"><span class="spin" aria-label="Uploading"></span></span>`
+      : s.state === 'failed' ? `<span class="state" data-retry="${s.key}">${esc(s.unreadable ? s.error : 'Failed. Tap to retry')}</span>` : '';
+    return `<div class="shot${s.state === 'failed' ? ' failed' : ''}">
+      ${src ? `<img src="${esc(src)}" alt="Photo ${i + 1}">` : ''}${state}
+      <span class="num">${i + 1}</span>
+      <button type="button" class="x" data-rm="${s.key}" aria-label="Remove photo ${i + 1}">×</button></div>`;
+  }).join('');
+  renderButtons();
 }
 $('strip').addEventListener('click', e => {
-  const f = e.target.dataset.rm; if (!f) return;
-  currentFiles = currentFiles.filter(x => x !== f); renderStrip();
+  const rm = e.target.closest('[data-rm]');
+  if (rm) { shots = shots.filter(s => s.key !== rm.dataset.rm); saveDraft(); renderStrip(); return; }
+  const retry = e.target.closest('[data-retry]');
+  if (retry) { const s = shots.find(x => x.key === retry.dataset.retry); if (s && s.data) upload(s); }
 });
 
-// qty +/-
-document.querySelectorAll('[data-d]').forEach(b =>
-  b.addEventListener('click', () => { $('qty').value = Math.max(1, (+$('qty').value||1) + (+b.dataset.d)); }));
+function renderButtons() {
+  const uploaded = shots.filter(s => s.state === 'ok').length;
+  const busy = shots.some(s => s.state === 'up');
+  $('done').disabled = current === null || !uploaded || busy;
+  $('done').textContent = busy ? 'Uploading…' : uploaded ? `✓ Done, queue item (${uploaded} photo${uploaded === 1 ? '' : 's'})` : '✓ Done, queue item';
+}
 
-async function addItem() {
-  if (!currentFiles.length) return;
-  const st = $('itemstatus'); st.textContent = 'Adding…';
-  const ctype = $('ctype').value, cnum = $('cnum').value.trim();
-  const loc = cnum ? `${ctype} ${cnum}` : '';
-  if (loc) localStorage.setItem('lastLocation', loc);
+// ---- queue the item -----------------------------------------------------------
+async function done() {
+  const files = shots.filter(s => s.state === 'ok').map(s => s.file);
+  if (!files.length || current === null) return;
+  const st = $('status'); st.className = 'status'; st.textContent = 'Queueing…';
+  $('done').disabled = true;
   try {
-    const r = await fetch('/api/confirm', {
-      method: 'POST', headers: jsonHeaders(),
-      body: JSON.stringify({
-        files: currentFiles,
-        quantity: $('qty').value.trim() === '' ? null : (+$('qty').value || 1),
-        note: $('note').value.trim(),
-        location: loc
-      })
-    });
+    const r = await fetch('/api/confirm', { method: 'POST', headers: jsonHeaders(),
+      body: JSON.stringify({ files, container: current || null, note: $('note').value.trim() }) });
+    if (r.status === 401 || r.status === 403) { needLogin(); throw new Error('login needed'); }
     const j = await r.json();
-    if (j.ok) {
-      st.textContent = `✓ Added ${currentFiles.length} photo(s) — identifying…`;
-      currentFiles = []; renderStrip();
-      $('qty').value = ''; $('note').value = '';
-      setTimeout(() => { st.textContent = ''; }, 3000);
-    } else st.textContent = 'Failed: ' + (j.error || 'unknown');
-  } catch (e) { st.textContent = 'Error: ' + e.message; }
-}
-$('additem').addEventListener('click', addItem);
-$('discard').addEventListener('click', () => {
-  if (currentFiles.length && !confirm('Discard the current item\'s photos?')) return;
-  currentFiles = []; renderStrip(); $('itemstatus').textContent = '';
-});
-
-$('snap').addEventListener('click', snap);
-document.addEventListener('keydown', e => {
-  const t = e.target.tagName;
-  if (e.code === 'Space' && t !== 'INPUT' && t !== 'BUTTON' && t !== 'SELECT') { e.preventDefault(); snap(); }
-});
-
-// Pending duplicate decisions (resolved entirely in the browser)
-let invItems = [];
-let lastPendingJSON = '';
-function renderPending(pending) {
-  const box = document.getElementById('pending-decisions');
-  // Don't rebuild while the user is editing a card (would wipe their typing).
-  if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#pending-decisions')) return;
-  const json = JSON.stringify(pending);
-  if (json === lastPendingJSON) return;
-  lastPendingJSON = json;
-  box.innerHTML = (pending || []).map(p => {
-    const c = p.candidate || {};
-    const matchIds = p.matches || (p.match_id ? [p.match_id] : []);
-    const matches = matchIds.map(id => invItems.find(it => it.id === id)).filter(Boolean);
-    const imgs = c.images || [];
-    return `<div class="dup-card" data-pid="${esc(p.pending_id)}">
-      <div class="dup-head">⚠ Possible duplicate — set what it is and which bag</div>
-      <div class="dup-edit">
-        <input class="d-name" value="${esc(c.name || '')}" placeholder="What exactly is in this bag?" aria-label="Item name">
-        <div class="d-row">
-          <label>Qty</label><input type="number" min="0" class="d-qty" value="${c.quantity ?? 1}" aria-label="Quantity">
-          <label>Bag</label><input class="d-loc" value="${esc(c.location || '')}" placeholder="e.g. Bag 14" aria-label="Bag location">
-        </div>
-      </div>
-      <div class="dup-thumbs">${imgs.map(f => `<img src="/captures/${esc(f)}" alt="Possible duplicate photo">`).join('')}</div>
-      ${matches.length ? `<div class="dup-matches"><div class="m-title">Add to a bag that already has this:</div>${matches.map(m => `
-        <div class="m-row">
-          <span class="m-info">📍 ${esc(m.location || '—')} · ×${m.quantity ?? 1} · ${esc(m.name || '')}</span>
-          <button class="btn go" data-act="add" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}" data-cur="${m.quantity ?? 1}">＋ Save: add to this bag</button>
-          <button class="btn" data-act="set" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}">Set qty</button>
-        </div>`).join('')}</div>` : ''}
-      <div class="dup-btns">
-        <button class="btn go" data-act="separate">Save as new entry (Bag above)</button>
-        <button class="btn skip" data-act="dismiss" title="Dismiss — nothing logged or changed">Skip</button>
-      </div>
-      <div class="dup-status" role="status" aria-live="polite"></div>
-    </div>`;
-  }).join('');
-}
-document.getElementById('pending-decisions').addEventListener('click', async e => {
-  const b = e.target.closest('button[data-act]'); if (!b) return;
-  const card = b.closest('.dup-card'); if (!card) return;
-  const candidate = {
-    name: card.querySelector('.d-name').value.trim(),
-    quantity: Number(card.querySelector('.d-qty').value) || 0,
-    location: card.querySelector('.d-loc').value.trim(),
-  };
-  const status = card.querySelector('.dup-status');
-  status.className = 'dup-status'; status.textContent = 'Saving…';
-  card.querySelectorAll('button').forEach(x => x.disabled = true);
-  try {
-    const res = await (await fetch('/api/resolve', { method: 'POST', headers: jsonHeaders(),
-      body: JSON.stringify({ pending_id: card.dataset.pid, action: b.dataset.act, target_id: b.dataset.target, candidate }) })).json();
-    if (res.ok) {
-      status.classList.add('ok');
-      const act = b.dataset.act;
-      if (act === 'add') status.textContent = `✓ Added ${candidate.quantity} — ${b.dataset.bag || 'bag'} now ×${(Number(b.dataset.cur)||0) + candidate.quantity}`;
-      else if (act === 'set') status.textContent = `✓ ${b.dataset.bag || 'Bag'} set to ×${candidate.quantity}`;
-      else if (act === 'separate') status.textContent = `✓ Saved as new entry${candidate.location ? ' in ' + candidate.location : ''}`;
-      else status.textContent = 'Dismissed';
-      lastPendingJSON = '';
-      setTimeout(poll, 900);
-    } else {
-      status.classList.add('err'); status.textContent = 'Failed: ' + (res.error || 'error');
-      card.querySelectorAll('button').forEach(x => x.disabled = false);
-    }
-  } catch (err) {
-    status.classList.add('err'); status.textContent = 'Network error: ' + err.message;
-    card.querySelectorAll('button').forEach(x => x.disabled = false);
+    if (!j.ok) throw new Error(j.error || 'failed');
+    const where = current ? (byId(current) || {}).name : 'Unfiled';
+    shots.forEach(s => s.preview && URL.revokeObjectURL(s.preview));
+    shots = []; $('note').value = ''; sessionCount++;
+    $('q-session').textContent = sessionCount;
+    saveDraft(); renderStrip();
+    st.className = 'status ok'; st.textContent = `✓ Queued ${files.length} photo${files.length === 1 ? '' : 's'} into ${where}. Next item!`;
+    refreshQueue();
+  } catch (e) {
+    st.className = 'status err'; st.textContent = 'Not queued: ' + e.message;
+    renderButtons();
   }
-});
-
-// Live inventory panel
-function renderQueue(queue) {
-  const box = $('queue-strip');
-  if (!queue || !queue.length) { box.innerHTML = ''; return; }
-  box.innerHTML = `<span class="qhead"><span class="spin"></span> Identifying ${queue.length} upload${queue.length === 1 ? '' : 's'}…</span>` +
-    queue.map(q => {
-      const img = (q.images || [])[0];
-      const loc = q.location ? esc(q.location) + ' · ' : '';
-      return `<span class="qitem">${img ? `<img src="/captures/${esc(img)}" alt="Upload being identified">` : ''}<span class="qstat">${loc}${esc(q.status)}</span></span>`;
-    }).join('');
 }
-async function poll() {
+$('done').addEventListener('click', done);
+$('note').addEventListener('input', () => saveDraft());
+
+function needLogin() {
+  setBanner('Saving needs the admin login. <a href="/dashboard">Log in on the dashboard</a>, then come back to this page.', true);
+}
+
+// ---- draft: survive the page reloading while the camera app is open ----------
+function saveDraft() {
+  store.set('captureDraft', { container: current, note: $('note').value,
+                              files: shots.filter(s => s.state === 'ok').map(s => s.file) });
+}
+function restoreDraft() {
+  const d = store.get('captureDraft', null);
+  if (!d) return null;
+  shots = (d.files || []).map(f => ({ key: Math.random().toString(36).slice(2), file: f, state: 'ok' }));
+  $('note').value = d.note || '';
+  return d;
+}
+
+// ---- running queue count --------------------------------------------------------
+let queue = [];
+function renderQueueCounts() {
+  const queued = queue.filter(q => q.status === 'queued');
+  $('q-all').textContent = queued.length;
+  $('q-here').textContent = current === null ? '–'
+    : queued.filter(q => (q.container || '') === (current || '')).length;
+}
+async function refreshQueue() {
+  try { queue = ((await (await fetch('/api/queue', { cache: 'no-store' })).json()).queue) || []; renderQueueCounts(); } catch (e) {}
+}
+
+// ---- start ------------------------------------------------------------------------
+async function init() {
+  const draft = restoreDraft();
+  renderStrip();
   try {
-    const items = ((await (await fetch('/api/inventory')).json()).items) || [];
-    invItems = items;
-    try { renderPending(((await (await fetch('/api/pending')).json()).pending) || []); } catch (e) {}
-    try { renderQueue(((await (await fetch('/api/queue')).json()).queue) || []); } catch (e) {}
-    const units = items.reduce((a, it) => a + (Number(it.quantity) || 0), 0);
-    const cats = new Set(items.map(it => it.category).filter(Boolean));
-    $('t-items').textContent = items.length;
-    $('t-units').textContent = units;
-    $('t-cats').textContent = cats.size;
-    $('inv').innerHTML = items.slice().reverse().map(it => {
-      const imgs = it.images || (it.image ? [it.image] : []);
-      return `
-      <div class="item">
-        <div class="thumb">
-          ${imgs.length ? `<img src="/captures/${esc(imgs[0])}" alt="${esc(it.name || 'Inventory item')}">` : `<img alt="No inventory image">`}
-          ${imgs.length > 1 ? `<span class="badge">${imgs.length}</span>` : ''}
-        </div>
-        <div>
-          <div class="n">${it.name ? esc(it.name) : '⏳ Identifying…'}</div>
-          <div class="c">${esc(it.category || '')}${it.location ? ' · 📍 ' + esc(it.location) : ''}</div>
-        </div>
-        <div class="q">×${it.quantity ?? 1}</div>
-      </div>`;
-    }).join('');
-    $('invempty').style.display = items.length ? 'none' : 'block';
-  } catch (e) {}
-  setTimeout(poll, 1500);
+    const j = await (await fetch('/api/containers', { cache: 'no-store' })).json();
+    containers = j.containers || []; zones = j.zones || [];
+  } catch (e) {
+    setBanner("Couldn't load containers: " + esc(e.message), true);
+  }
+  // A QR label opens /c/<id>; otherwise continue where the last session left off.
+  const m = /^\/c\/([^/]+)$/.exec(location.pathname);
+  const fromUrl = m ? decodeURIComponent(m[1]) : null;
+  if (fromUrl && byId(fromUrl)) {
+    setCurrent(fromUrl);
+  } else {
+    if (fromUrl) setBanner(`No container <b>${esc(fromUrl)}</b> exists (deleted, or a label from another server). Pick one instead.`, true);
+    const last = draft && draft.container != null ? draft.container : store.get('lastContainer', null);
+    setCurrent(last === UNFILED || (last && byId(last)) ? last : null, false);
+    if (current === null && containers.length) openPicker();
+  }
+  refreshQueue();
+  setInterval(refreshQueue, 5000);
 }
-poll();
-renderStrip();
-start().catch(e => {
-  statusEl.textContent = 'Camera error: ' + e.message + ' — grant camera permission in System Settings › Privacy.';
-});
+init();
 
-// ---- live reload: pick up deploys without a manual refresh ----
+// ---- live reload: pick up deploys, but never while photos are staged --------------
 (() => {
   let stamp = null;
   async function check() {
@@ -666,7 +506,7 @@ start().catch(e => {
       const r = await fetch(location.pathname, { method: 'HEAD', cache: 'no-store' });
       const lm = r.headers.get('Last-Modified');
       if (lm) {
-        if (stamp && lm !== stamp && !stream?.active && currentFiles.length === 0) location.reload();
+        if (stamp && lm !== stamp && !shots.length && !$('sheet-bg').classList.contains('show')) location.reload();
         stamp = lm;
       }
     } catch (e) {}

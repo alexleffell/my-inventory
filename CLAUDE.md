@@ -84,7 +84,8 @@ server.py            # tiny stdlib HTTP server (ThreadingHTTPServer) on :8770
 mcp_server.py        # optional MCP server (stdlib): list/detail reads, request_purchase,
                      # attach_item_model / get_item_model (3D models)
 public/
-  capture.html       # camera capture (multi-photo per item) + live inventory panel
+  capture.html       # phone-first capture: current container + picker, file-input camera,
+                     # multi-photo item + note, running queue count (/capture and /c/<id>)
   dashboard.html     # editable dashboard: sidebar (nav/stats/category filter), item detail
                      # modal, edit modal w/ inline camera, lightbox gallery, 3D model viewer
                      # modal and per-item model attach/view/delete
@@ -105,22 +106,32 @@ captures/
 deploy/              # Dockerfile/compose, Caddy + systemd units, optional agent bridge
 ```
 
-### Capture → log pipeline (multiple photos per item)
-1. Browser opens `/capture`, uses `getUserMedia` to show a camera (e.g. an iPhone
-   via macOS Continuity Camera, or any webcam).
-2. User presses **Capture** one or more times → each frame is POSTed to
-   `/api/capture` → saved as `captures/cap-<ms>.png` and added to the page's
-   "current item" photo strip. Several photos build up ONE item.
-3. User sets quantity/location and clicks **Add to inventory** → POST `/api/confirm`
-   with `{files: [...], ...}` writes ONE sidecar `captures/<first-file-stem>.json`.
-4. (Optional) An LLM agent watches for new sidecars, reads the photos, identifies
-   the part, and appends an item with an `images` array to `data/inventory.json`.
-   Without an agent, items are saved with whatever name/notes the user typed.
+### Capture → queue pipeline (phone first, multiple photos per item)
+Capture works over plain HTTP on a home network, so it never uses an in-page
+camera (`getUserMedia` needs HTTPS). The phone's own camera app does the work:
+1. The phone opens `/c/<container-id>` by scanning a container's QR label (or opens
+   `/capture` and picks a container: a type-to-search picker grouped by zone, with
+   recent containers first, plus an explicit "Unfiled"). Scanning is never the only
+   way to set a container. The choice persists in `localStorage.lastContainer`.
+2. **📷 Take photo** is a `<label>` around `<input type=file accept="image/*"
+   capture="environment">`, which opens the camera app. "From library" is the
+   same input with `multiple` and no `capture`. Each photo is downscaled in the
+   browser (canvas, 2000px long edge, JPEG 0.85) and POSTed to `/api/capture` at
+   once → `captures/cap-<ms>.jpg`. Several photos build up ONE item.
+3. **✓ Done, queue item** → POST `/api/confirm` `{files, container, note}` writes ONE
+   sidecar `captures/<first-file-stem>.json`. The page shows a running count from
+   `/api/queue` (all queued / queued in this container / this session). Staged
+   photos and the note survive a page reload (`localStorage.captureDraft`),
+   because iOS can reload the page while the camera app is open.
+4. Nothing is identified on the server. The queue waits until the user asks a
+   Claude Code session to **tag the queue** (see that section).
 
-The sidecar (not the raw photo) is the trigger, so identification only happens once
-the user has confirmed. To find unprocessed captures: list `captures/*.json` whose
-`files` are not already in any item's `images` in `inventory.json`. (Legacy sidecars
-may have a single `file` field instead of `files`.)
+There is no quantity field: the agent reads the count off the label. The sidecar
+(not the raw photo) is the queue entry, so identification only happens once the
+user has confirmed. Unprocessed captures are the `captures/cap-*.json` whose
+`files` are not already in any item's `images` or a pending candidate's
+(`queued_sidecars()` in `server.py`; `GET /api/queue` lists them). Legacy sidecars
+may have a single `file` field instead of `files`.
 
 ### Adding photos to an existing item (re-examine / enrich / identify)
 The dashboard edit modal has an inline camera ("Add photo") and a removable photo
@@ -578,9 +589,9 @@ the loop going:
   no name (a blank-name item with photos can trigger an enrich/identify step). The
   UI shows "⏳ Identifying…" until a name exists. Only block a save with neither a
   name nor a photo.
-- **Quantity comes from the label, not a guess.** On the capture page a blank Qty
-  means "read the printed pack count off the label". A filled value is an explicit
-  override. Never invent a count.
+- **Quantity comes from the label, not a guess.** The capture page has no quantity
+  field: the agent reads the printed pack count off the label. With no readable
+  count it writes 1 and says `unconfirmed` in the notes. Never invent a count.
 - **Location format** is `"<Bag|Bin> <number>"` (e.g. `Bag 1`, `Bin 3`). Both pages
   share a **last-used location** in `localStorage['lastLocation']`.
 - **Image order: the part comes first.** The FIRST image in `images` must clearly
