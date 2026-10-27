@@ -1,6 +1,8 @@
-# my-inventory
+# Maker Inventory
 
-**Landing page: [m-esm.github.io/my-inventory](https://m-esm.github.io/my-inventory/)**
+> Forked from [m-esm/my-inventory](https://github.com/m-esm/my-inventory), the
+> upstream project this builds on. Like upstream, it is released under the GNU
+> General Public License version 3 (see [LICENSE](LICENSE)).
 
 A photo-driven inventory for small parts: electronics components, hardware,
 fasteners, craft supplies, anything you keep in labelled bags or bins. Snap a

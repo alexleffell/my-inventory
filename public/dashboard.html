@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Moshe's Inventory</title>
+<title>Maker Inventory</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>📦</text></svg>" />
 <meta name="theme-color" content="#0d0b09" />
-<meta name="description" content="Moshe's electronics inventory — searchable parts, modules, and components." />
+<meta name="description" content="Maker inventory — tools, parts, and materials, by zone and container." />
 <style>
   :root {
     color-scheme: dark;
@@ -533,7 +533,7 @@
       <div class="brand">
         <span class="mark" aria-hidden="true">📦</span>
         <div>
-          <h1 class="brand-name">Moshe's<br>Inventory</h1>
+          <h1 class="brand-name">Maker<br>Inventory</h1>
           <div class="brand-sub"><span class="live"><span class="dot"></span> live</span></div>
         </div>
       </div>
@@ -1017,7 +1017,7 @@ function applyFiltersFromUrl() {
   applyingUrl = false;
 }
 function setDocTitle(it) {
-  document.title = (it && it.name) ? (it.name + " · Moshe's Inventory") : DEFAULT_TITLE;
+  document.title = (it && it.name) ? (it.name + " · Maker Inventory") : DEFAULT_TITLE;
 }
 noteListBase();
 applyFiltersFromUrl();
