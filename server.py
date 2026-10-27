@@ -504,16 +504,17 @@ def pending_review_ids():
     return ids
 
 
-def item_id_from_path(path):
+def item_id_from_path(path, prefix="/i/"):
     """Item id encoded in `/i/<id>`, or None if this is not that route.
 
     IDs are `cap-<ms>` / `item-<ms>` (letters, digits, `_`, `.`, `-`). Anything
     with a slash, `..`, or other punctuation is rejected so `/i/` cannot be
-    used as a path-traversal gadget.
+    used as a path-traversal gadget. `prefix` reuses the same check for other
+    id routes (`/c/<container-id>`).
     """
-    if not path.startswith("/i/"):
+    if not path.startswith(prefix):
         return None
-    rest = path[3:]
+    rest = path[len(prefix):]
     if not rest or "/" in rest or rest in (".", ".."):
         return None
     ident = unquote(rest)
@@ -523,6 +524,23 @@ def item_id_from_path(path):
     if ident[0] in ".-" or any(c not in allowed for c in ident):
         return None
     return ident
+
+
+def container_id_from_path(path):
+    """Container id in `/c/<id>` (the URL a QR label encodes), or None."""
+    return item_id_from_path(path, "/c/")
+
+
+def image_ext(blob):
+    """File extension for an uploaded photo, from its first bytes; None if the
+    bytes are not a PNG, JPEG or WebP image."""
+    if blob[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if blob[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        return ".webp"
+    return None
 
 
 # 3D model files an item can carry (models/ dir, item field "models": [...]).
@@ -757,8 +775,11 @@ def openapi_spec(base_url):
             "/api/queue": {"get": {
                 "operationId": "getIdentificationQueue",
                 "summary": "Photos and items still awaiting identification.",
-                "description": "Recently photographed parts that do not have a name yet. They show up in "
-                               "/api/items with an empty name, so check here before concluding something is absent.",
+                "description": "Recently photographed items that have not been identified yet: each "
+                               "queued capture lists its photos, the container it was shot in "
+                               "(id + location path) and the user's optional note. Items being "
+                               "re-identified show up in /api/items with an empty or old name, so "
+                               "check here before concluding something is absent.",
                 "responses": {"200": {"description": "Queued uploads and items being identified.",
                                       "content": {"application/json": {"schema": {"type": "object", "properties": {
                                           "count": {"type": "integer"},
@@ -897,6 +918,8 @@ class Handler(BaseHTTPRequestHandler):
         name = pages.get(path)
         if not name and item_id_from_path(path):
             name = "dashboard.html"
+        if not name and container_id_from_path(path):
+            name = "capture.html"
         if not name:
             self.send_response(404)
             self.end_headers()
@@ -917,6 +940,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         if path == "/capture":
             return self._serve_file(os.path.join(PUBLIC, "capture.html"))
+        if path.startswith("/c/"):
+            # The link a container's QR label encodes: the capture page with that
+            # container preselected (the page reads the id from the path).
+            if container_id_from_path(path):
+                return self._serve_file(os.path.join(PUBLIC, "capture.html"))
+            return self._send(404, {"error": "not found"})
         if path == "/buy" or path == "/wishlist":
             return self._serve_file(os.path.join(PUBLIC, "wishlist.html"))
         if path.startswith("/vendor/"):
@@ -995,28 +1024,22 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/queue":
             # Public: uploads awaiting identification (so the UI can show a queue).
             inv = load_inv()
-            logged = set(img for i in inv.get("items", []) for img in (i.get("images") or []))
-            # Photos already attached to a PENDING duplicate decision are NOT awaiting
-            # identification — they await the user's resolution. Exclude them so the
-            # queue doesn't double-count them (mirrors deploy/find_unprocessed.py).
+            by_id = container_index(load_containers())
             try:
-                with open(PENDING) as pf:
-                    pend = json.load(pf)
-                logged |= set(img for p in pend.get("pending", [])
-                              for img in (p.get("candidate", {}).get("images") or []))
-            except Exception:
-                pass
+                pend = load_pending()
+            except (OSError, ValueError):
+                pend = {}
             q = []
-            # capture-page confirms not yet turned into items
-            for f in sorted(glob.glob(os.path.join(CAPTURES, "cap-*.json"))):
-                try:
-                    d = json.load(open(f))
-                except Exception:
-                    continue
-                files = d.get("files") or ([d["file"]] if d.get("file") else [])
-                if files and not any(x in logged for x in files):
-                    q.append({"images": files, "quantity": d.get("quantity"),
-                              "location": d.get("location"), "status": "queued"})
+            # capture-page confirms not yet turned into items. Photos already on a
+            # PENDING duplicate decision await the user, not identification, so
+            # queued_sidecars() skips them (mirrors deploy/find_unprocessed.py).
+            for f, d in queued_sidecars(inv, pend):
+                cid = d.get("container")
+                q.append({"sidecar": os.path.basename(f),
+                          "images": d.get("files") or [d["file"]],
+                          "container": cid, "location": container_path(cid, by_id),
+                          "note": d.get("note") or "", "quantity": d.get("quantity"),
+                          "created": d.get("created"), "status": "queued"})
             # items created but not yet named (dashboard adds being identified),
             # plus items with an outstanding review marker (enrich / re-identify)
             reviewing = pending_review_ids()
@@ -1024,7 +1047,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not (it.get("name") or "").strip() or it.get("id") in reviewing:
                     q.append({"id": it.get("id"), "name": it.get("name") or "",
                               "images": it.get("images") or [],
-                              "quantity": it.get("quantity"), "location": it.get("location"),
+                              "quantity": it.get("quantity"), "container": it.get("container"),
+                              "location": container_path(it.get("container"), by_id),
                               "status": "identifying"})
             return self._send(200, {"count": len(q), "queue": q})
         if path == "/api/items":
@@ -1289,7 +1313,10 @@ class Handler(BaseHTTPRequestHandler):
                 img = base64.b64decode(data_url)
             except Exception:
                 return self._send(400, {"error": "bad image"})
-            name = "cap-%d.png" % int(time.time() * 1000)
+            ext = image_ext(img)
+            if not ext:
+                return self._send(400, {"error": "not a PNG, JPEG or WebP image"})
+            name = "cap-%d%s" % (int(time.time() * 1000), ext)
             with open(os.path.join(CAPTURES, name), "wb") as f:
                 f.write(img)
             return self._send(200, {"ok": True, "file": name})
@@ -1367,10 +1394,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"error": "no valid captures"})
             meta = {
                 "files": files,
-                "quantity": payload.get("quantity", 1),
-                "note": payload.get("note", ""),
-                "location": payload.get("location", ""),
+                "note": str(payload.get("note") or "").strip(),
+                "container": payload.get("container"),
+                "created": int(time.time() * 1000),
             }
+            if "location" in payload and not payload.get("container"):
+                meta.pop("container")          # an older capture client
+                meta["location"] = payload["location"]
+            if payload.get("quantity") is not None:
+                meta["quantity"] = payload["quantity"]
+            if not self._places(meta):
+                return
             sidecar = os.path.splitext(files[0])[0] + ".json"
             with open(os.path.join(CAPTURES, sidecar), "w") as f:
                 json.dump(meta, f)

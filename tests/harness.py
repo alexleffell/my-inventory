@@ -43,6 +43,10 @@ class Server:
         for name in CODE:
             if os.path.exists(os.path.join(ROOT, name)):
                 shutil.copy(os.path.join(ROOT, name), os.path.join(self.root, name))
+        os.makedirs(os.path.join(self.root, "public"))
+        for name in os.listdir(os.path.join(ROOT, "public")):
+            if name.endswith(".html"):
+                shutil.copy(os.path.join(ROOT, "public", name), os.path.join(self.root, "public", name))
         if self.fixture:
             src = os.path.join(FIXTURES, self.fixture)
             for sub in os.listdir(src):

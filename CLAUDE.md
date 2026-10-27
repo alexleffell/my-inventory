@@ -21,7 +21,8 @@ Routes: `/` and `/dashboard` → the dashboard (public read-only landing page; e
 controls + a 📷 Capture link appear after admin login). `/i/<id>` → the same
 dashboard with that item's detail modal open (stable public permalink; the
 dashboard also pushStates here when you open an item). `/capture` → the capture
-page (camera tool). `/buy` (alias `/wishlist`) → the "To buy" page (purchase
+page. `/c/<container-id>` → the capture page with that container preselected
+(the link a container's QR label encodes). `/buy` (alias `/wishlist`) → the "To buy" page (purchase
 requests). Requires only Python 3 (tested on 3.9+). No build step.
 
 HTML pages are served with `Last-Modified` + `Cache-Control: no-store`, and the
@@ -98,8 +99,8 @@ models/
   model-<ms>-<name>.<ext>  # 3D model files attached to items (stl/3mf/obj/glb/
                      # gltf/step/stp/scad); gitignored, bind-mounted in Docker
 captures/
-  cap-<ms>.png       # raw captured frames (the photo for each item)
-  cap-<ms>.json      # one sidecar per item on confirmation: {files:[...], quantity, note, location}
+  cap-<ms>.jpg       # uploaded photos (.jpg/.png/.webp, type detected from the bytes)
+  cap-<ms>.json      # one sidecar per item on confirmation: {files:[...], note, container, created}
   review-<ms>.json   # transient marker: photos added to an EXISTING item (enrich trigger)
 deploy/              # Dockerfile/compose, Caddy + systemd units, optional agent bridge
 ```
@@ -154,11 +155,11 @@ hardcoded.
 | `POST /api/containers` | **Admin**: `{action: create\|update\|delete, id?, name, type, parent, zone}`. Rejects cycles and a zone on a nested container; delete is 409 while anything is inside. |
 | `POST /api/zones`    | **Admin**: `{action: create\|rename\|delete, id?, name}`. |
 | `GET /api/items`     | Public. No args: one compact summary row per item for the WHOLE inventory (`id, name, category, quantity, container, location` path, `images` count, `models`, `undelivered`) via the pure `item_summary()` helper. `?ids=a,b,c`: the full records for those ids, in the order asked, plus a `missing` list. This is the agent entry point — there is no search endpoint (see "Agent access contract"). |
-| `GET /api/queue`     | Public: uploads awaiting identification + items with an outstanding `review-*.json` marker (a "⏳ Identifying…" strip). |
+| `GET /api/queue`     | Public: the identification queue. `status: "queued"` entries are unprocessed sidecars `{sidecar, images, container, location, note, created}`; `status: "identifying"` entries are nameless items or items with an outstanding `review-*.json` marker. |
 | `GET /api/identify/status` | Public: reports `{available: true, mode: "watcher"}` — identification runs via the watcher/bridge, no server-side API key. |
 | `POST /api/identify` | **Admin**: queue an item for (re-)identification. Writes a `captures/review-*.json` marker (reason `identify requested from dashboard`) for the watcher; dedupes if one is already pending. Never calls an LLM API itself. |
-| `POST /api/capture`  | `{image: dataURL}` → saves PNG, returns `{file}`.           |
-| `POST /api/confirm`  | `{files:[...], quantity, note, location}` → writes one sidecar for the item. |
+| `POST /api/capture`  | `{image: dataURL}` → saves `cap-<ms>.jpg/.png/.webp` (type from the bytes; anything else is 400), returns `{file}`. |
+| `POST /api/confirm`  | `{files:[...], container, note}` → writes one sidecar for the item (container validated; empty = unfiled). |
 | `POST /api/ingest`   | Upsert an item by `id` (an agent's identified items). No review marker. |
 | `POST /api/add`      | Create an item (dashboard manual add); server assigns `id`. |
 | `POST /api/update`   | `{id, ...fields}` → merge fields. New `images` ⇒ a `review-*.json` marker. Pass `stock` to re-split the item across locations. |
