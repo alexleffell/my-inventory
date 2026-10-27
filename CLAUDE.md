@@ -40,19 +40,28 @@ text `--text/--dim/--dim2/--faint`, accent families
 --amberline`, status `--okfg/--warnfg/--redfg` + `*bg`/`*line` tints,
 `--focus`, radii `--r-ctl/--r-card/--r-modal`, shadows `--shadow-1/2`).
 Orange owns actions/selection/brand; amber owns the physical storage layer
-(location chips, storage map); green/red/yellow are status-only. Every page carries the 2px `body::before` ember strip. New UI
+(container chips, zone and container headings); green/red/yellow are status-only. Every page carries the 2px `body::before` ember strip. New UI
 must use these tokens, not ad-hoc hex. The dashboard has a left sidebar
 (brand, stats, page nav, category filter via `activeCat`/`renderSideCats()`,
-admin actions) that collapses to a drawer under 920px, and an item detail
+admin actions) that collapses to a drawer under 920px. Items render grouped
+(`groupedHtml()`): a section per zone, then one per container in tree order,
+with "No zone" and "Not in a container" last; a split item appears under each
+container it has units in. The `#group` select switches to a flat grid. The
+`#cont` filter (`containerOptions()`: optgroup per zone, nested containers
+indented, plus Unfiled) matches a container AND everything nested in it
+(`subtree()`). Paths and zones are looked up client-side from `/api/containers`
+(`pathOf()`, `zoneNameOf()`), which the page polls with the inventory. The old
+"Bag N" storage map is gone; the grouped view replaces it. There is an item detail
 modal (`openDetail(id)`) opened by clicking a card or visiting `/i/<id>`.
 Each item's name is an `<a href="/i/<id>">`; opening the modal pushStates
 that path, closing it returns to the list (`/` or `/dashboard`). The address
-bar also keeps the dashboard view: `q` (name, id, category, location, notes),
-`cat`, `loc`, and `sort`. Typing in the search box replaces the current
+bar also keeps the dashboard view: `q` (name, id, category, container path,
+zone, notes), `cat`, `container` (an id, or `__unfiled__`), `sort`, and
+`group=none`. Typing in the search box replaces the current
 history entry; changing a filter, the sort, or which item is open pushes one.
 Back and forward restore the box, the filters, and whether the detail modal
 is open. An exact item-id query shows that one item even when the category
-or location filter would hide it. Copy link copies the bare `/i/<id>`
+or container filter would hide it. Copy link copies the bare `/i/<id>`
 permalink. Dialogs use
 `role="dialog"` + background `inert` via `showOverlay()/hideOverlay()`
 (stacked focus restore) — route any new overlay through those helpers.
@@ -620,8 +629,10 @@ the loop going:
 - **Quantity comes from the label, not a guess.** The capture page has no quantity
   field: the agent reads the printed pack count off the label. With no readable
   count it writes 1 and says `unconfirmed` in the notes. Never invent a count.
-- **Location format** is `"<Bag|Bin> <number>"` (e.g. `Bag 1`, `Bin 3`). Both pages
-  share a **last-used location** in `localStorage['lastLocation']`.
+- **Locations are containers.** Items point at a container id; never write
+  free-text location strings (the server only accepts them for backward
+  compatibility). The capture page and the dashboard's Add modal share the
+  **last-used container** in `localStorage['lastContainer']` (a JSON string).
 - **Image order: the part comes first.** The FIRST image in `images` must clearly
   show the actual physical part (it's the card thumbnail). Packaging/label/barcode
   shots go AFTER.

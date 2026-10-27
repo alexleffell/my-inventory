@@ -190,6 +190,8 @@
   @media (max-width: 620px) {
     .toolbar { position: static; padding: 10px 14px; }
     .toolbar .search { min-width: 0; max-width: none; flex: 1 1 auto; }
+    .toolbar select { flex: 1 1 40%; min-width: 0; }
+    .toolbar #cont { flex-basis: 100%; }
     .result-count { display: none; }
     main { padding: 16px 14px 70px; }
     .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -241,66 +243,23 @@
   .queue-strip .qitem img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line2); }
   .queue-strip .qstat { font-size: 11px; color: var(--dim); }
 
-  /* storage map — bags / trays / bins, expandable */
-  .sm-section { border: 1px solid var(--line); background: var(--panel); border-radius: var(--r-card);
-                margin-bottom: 12px; padding: 10px 14px 12px; }
-  .sm-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none;
-               color: var(--dim); font: 600 10.5px var(--mono); text-transform: uppercase; letter-spacing: .1em;
-               padding: 2px 0; text-align: left; }
-  .sm-toggle:hover { color: var(--text); }
-  .sm-toggle .chev { display: inline-block; transition: transform .15s; font-size: 11px; }
-  .sm-section.collapsed .chev { transform: rotate(-90deg); }
-  .sm-section.collapsed .storage-map { display: none; }
-  .storage-map { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px 26px; padding-top: 10px; }
-  .sm-group { display: flex; flex-direction: column; gap: 8px; }
-  .sm-ghead { font-size: 11px; color: var(--dim); display: flex; align-items: baseline; gap: 7px; }
-  .sm-ghead b { color: var(--amberfg); font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
-  .sm-ghead .sm-gaps { color: var(--warnfg); }
-  .sm-cells { display: flex; flex-wrap: wrap; gap: 6px; }
-  /* fixed-width cells so the slots align like a real rack, not a tag cloud */
-  .sm-cell { width: 58px; height: 48px; padding: 0 3px; border-radius: var(--r-ctl); border: 1px solid var(--line2);
-             display: flex; flex-direction: column; align-items: center; justify-content: center;
-             line-height: 1; background: var(--panel2); transition: transform .08s, border-color .12s, background .12s; }
-  .sm-cell .sm-n { font-size: 14px; font-weight: 600; font-family: var(--mono); }
-  .sm-cell .sm-c { font-size: 9.5px; color: var(--dim); margin-top: 4px; white-space: nowrap; overflow: hidden; max-width: 100%; }
-  .sm-cell.filled { cursor: pointer; border-color: var(--amberline); background: #1e1710; }
-  .sm-cell.filled:hover { transform: translateY(-1px); border-color: var(--amber); }
-  .sm-cell.filled .sm-n { color: var(--amberfg); }
-  .sm-cell.filled .sm-c { color: #c89465; }
-  .sm-cell.open { border-color: var(--amber); background: #281e12; box-shadow: inset 0 0 0 1px var(--amber); transform: none; }
-  .sm-cell.empty { border-style: dashed; border-color: var(--line); opacity: .5; }
-  .sm-cell.empty .sm-n { color: var(--dim); font-weight: 500; font-size: 12px; }
-  .sm-cell.empty .sm-c { color: var(--dim); }
-
-  /* expandable detail panel — the "open bag" view */
-  .sm-detail { margin-bottom: 16px; border: 1px solid #d99e4f80; border-radius: var(--r-card);
-               background: #16110d; overflow: hidden; box-shadow: var(--shadow-1); }
-  .sm-detail:empty { display: none; }
-  .sm-dhead { display: flex; align-items: center; gap: 10px; padding: 9px 13px;
-              background: linear-gradient(180deg, #241810, #1b1510); border-bottom: 1px solid var(--amberline); }
-  .sm-dhead b { font-size: 13.5px; color: var(--amberfg); font-family: var(--mono); letter-spacing: .02em; }
-  .sm-dhead .sm-sub { color: var(--dim); font-family: var(--mono); font-size: 11.5px; }
-  .sm-dhead .sm-close { margin-left: auto; flex-shrink: 0; background: none; border: 1px solid var(--line2);
-              color: var(--dim); border-radius: 8px; width: 32px; height: 32px; font-size: 18px; line-height: 1; cursor: pointer; }
-  .sm-dhead .sm-close:hover { color: var(--text); border-color: var(--amber); }
-  .sm-items { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 13px; }
-  .sm-item { width: 94px; }
-  .sm-item .sm-thumb { width: 94px; height: 72px; border-radius: 8px; overflow: hidden; background: #070605;
-              border: 1px solid #3d3427; display: flex; align-items: center; justify-content: center; padding: 0; }
-  .sm-item .sm-thumb.zoom { cursor: zoom-in; }
-  .sm-item .sm-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .sm-item .sm-thumb .noimg { font-size: 22px; opacity: .5; }
-  .sm-item .sm-iname { font-size: 11px; margin-top: 5px; line-height: 1.3; color: var(--text);
-              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .sm-item .sm-iname a { color: inherit; text-decoration: none; }
-  .sm-item .sm-iname a:hover { color: var(--orangefg); }
-  .sm-item .sm-iqty { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 1px; }
-  @media (max-width: 640px) {
-    .storage-map { gap: 8px 16px; padding-top: 8px; }
-    .sm-cell { width: 48px; height: 44px; }
-    .sm-item { width: 82px; }
-    .sm-item .sm-thumb { width: 82px; height: 64px; }
-  }
+  /* items grouped by zone, then container */
+  .zone-sec { margin-bottom: 26px; }
+  .zone-h { display: flex; align-items: baseline; gap: 10px; margin: 0 0 12px; padding-bottom: 7px;
+            border-bottom: 1px solid var(--amberline); font: 600 12px/1.3 var(--mono); text-transform: uppercase;
+            letter-spacing: .08em; color: var(--amberfg); }
+  .zone-h .n { color: var(--dim); font-weight: 400; letter-spacing: .03em; }
+  .cont-sec { margin: 0 0 20px; }
+  .cont-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 9px; font-size: 14px; font-weight: 600; }
+  .cont-h .cname { background: none; border: none; padding: 0; color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+  .cont-h .cname:hover { color: var(--amberfg); }
+  .cont-h .cparent { color: var(--dim); font-weight: 400; }
+  .cont-h .ctype { font: 10px/1.4 var(--mono); text-transform: uppercase; letter-spacing: .03em; color: var(--dim2);
+                   border: 1px solid var(--line2); border-radius: var(--r-tag); padding: 0 5px; font-weight: 400; }
+  .cont-h .n { color: var(--dim); font: 12px var(--mono); font-weight: 400; }
+  .cont-h .cap { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--dim2); text-decoration: none;
+                 border: 1px solid var(--line2); border-radius: var(--r-ctl); padding: 3px 9px; }
+  .cont-h .cap:hover { border-color: var(--amber); color: var(--amberfg); }
 
   /* wishlist / "to buy" — compact summary banner (full list lives on /buy) */
   .wl-summary { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; text-decoration: none;
@@ -333,7 +292,7 @@
   .dup-edit .d-row label { font-size: 12px; color: var(--dim); display: inline-flex; align-items: center; gap: 7px; }
   .dup-edit .d-row input { border-radius: 8px; border: 1px solid var(--line2); background: var(--panel2); color: var(--text); padding: 7px 10px; }
   .dup-edit .d-qty { width: 72px; text-align: center; }
-  .dup-edit .d-loc { width: 130px; }
+  .dup-edit .d-cont { max-width: 260px; }
   .dup-matches { margin-bottom: 11px; }
   .m-title { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
   .m-row { display: flex; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid #ffffff12; flex-wrap: wrap; }
@@ -403,17 +362,20 @@
   .s-row .s-x { flex: 0 0 auto; color: var(--dim2); font-family: var(--mono); font-size: 13px; }
   .s-row .s-qty { flex: 0 0 76px; text-align: center; }
   .s-row .s-in { flex: 0 0 auto; color: var(--dim2); font-size: 12px; }
-  .s-row .s-loc { flex: 1 1 auto; min-width: 0; }
+  .s-row .s-cont { flex: 1 1 auto; min-width: 0; }
   .s-row .s-del { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 8px; cursor: pointer;
                   border: 1px solid var(--line2); background: var(--panel2); color: var(--dim); font-size: 14px; }
   .s-row .s-del:hover { border-color: var(--redfg); color: var(--redfg); }
   .stock-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  .stock-foot .btn, .stock-foot a.hint { white-space: nowrap; }
+  .stock-foot { flex-wrap: wrap; }
   .stock-total { font-family: var(--mono); font-size: 12px; color: var(--amberfg); }
   .chip.loc .cq { font-family: var(--mono); opacity: .75; margin-left: 4px; }
   .d-stock { display: flex; flex-direction: column; gap: 4px; }
   .d-stock .row { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; }
   .d-stock .row .where { color: var(--amberfg); }
   .d-stock .row .n { font-family: var(--mono); color: var(--text); }
+  .d-stock .row .zone { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .03em; color: var(--dim); }
   .edit-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .edit-strip:empty { display: none; }
   .edit-strip .shot { position: relative; }
@@ -545,6 +507,7 @@
       <nav class="side-nav" aria-label="Pages">
         <a class="nav-item on" href="/dashboard" aria-current="page"><span class="ico" aria-hidden="true">📦</span>Inventory</a>
         <a class="nav-item" id="capture-link" href="/capture"><span class="ico" aria-hidden="true">📷</span>Capture</a>
+        <a class="nav-item" href="/containers"><span class="ico" aria-hidden="true">🗄</span>Containers</a>
         <a class="nav-item" href="/buy"><span class="ico" aria-hidden="true">🛒</span>To buy<span class="nav-badge" id="nav-buy-count" hidden></span></a>
         <a class="nav-item" id="fulllist-link" href="/api/inventory" target="_blank" rel="noopener" title="Raw inventory JSON"><span class="ico" aria-hidden="true">🗂</span>Export JSON</a>
       </nav>
@@ -564,8 +527,12 @@
     <div class="main-col">
       <div class="toolbar">
         <button type="button" class="btn menu-btn" id="menu-btn" aria-label="Open menu" aria-expanded="false">☰</button>
-        <div class="search"><input id="q" aria-label="Search inventory" placeholder="Search name, id, category, location, notes…"><button type="button" class="q-clear" id="q-clear" aria-label="Clear search" hidden>✕</button></div>
-        <select id="loc" aria-label="Filter by location"><option value="">All locations</option></select>
+        <div class="search"><input id="q" aria-label="Search inventory" placeholder="Search name, id, category, container, zone, notes…"><button type="button" class="q-clear" id="q-clear" aria-label="Clear search" hidden>✕</button></div>
+        <select id="cont" aria-label="Filter by container"><option value="">All containers</option></select>
+        <select id="group" aria-label="Group items">
+          <option value="place">By container</option>
+          <option value="none">Flat list</option>
+        </select>
         <select id="sort" aria-label="Sort items">
           <option value="recent">Newest first</option>
           <option value="name">Name A–Z</option>
@@ -577,13 +544,6 @@
       </div>
 
       <main>
-        <section class="sm-section" id="sm-section" hidden>
-          <button type="button" class="sm-toggle" id="sm-toggle" aria-expanded="true" aria-controls="storage-map">
-            <span class="chev" aria-hidden="true">▾</span><span id="sm-summary">Storage</span>
-          </button>
-          <div id="storage-map" class="storage-map"></div>
-        </section>
-        <div id="sm-detail" class="sm-detail"></div>
         <div id="queue-strip" class="queue-strip"></div>
         <a id="wishlist-summary" class="wl-summary hidden" href="/buy">
           <span class="wl-title"><span class="ico" aria-hidden="true">🛒</span>To buy</span>
@@ -591,7 +551,7 @@
           <span class="wl-go">View list →</span>
         </a>
         <div id="pending-decisions" class="pending-decisions"></div>
-        <div class="grid" id="grid"></div>
+        <div id="grid"></div>
         <div class="empty" id="empty" style="display:none"></div>
       </main>
     </div>
@@ -632,10 +592,11 @@
           <div class="field"><label for="f-category">Category</label><input id="f-category" list="cats-list" placeholder="e.g. Resistors"></div>
           <div class="field"><label for="f-condition">Condition</label><input id="f-condition" placeholder="e.g. New (sealed)"></div>
           <div class="field full" id="stock-field">
-            <label id="stock-label">Stock <span class="hint">— add a row per place if this part is split across bags/shelves</span></label>
+            <label id="stock-label">Stock <span class="hint">— add a row per container if this part is split across several</span></label>
             <div class="stock-rows" id="stock-rows" role="group" aria-labelledby="stock-label"></div>
             <div class="stock-foot">
               <button type="button" class="btn" id="add-stock-btn">＋ Add another location</button>
+              <a class="hint" href="/containers" target="_blank" rel="noopener">Manage containers ↗</a>
               <span class="stock-total" id="stock-total"></span>
             </div>
           </div>
@@ -665,7 +626,6 @@
           </div>
         </div>
         <datalist id="cats-list"></datalist>
-        <datalist id="locs-list"></datalist>
       </div>
       <div class="foot">
         <button class="btn danger" id="del-btn">Delete</button>
@@ -751,7 +711,10 @@
 <script>
 let ITEMS = [];
 let activeCat = '';         // sidebar category filter
-let activeLoc = '';
+let activeCont = '';        // container filter: a container id, UNFILED, or '' (all)
+let groupBy = 'place';      // 'place' = sections per zone, then container; 'none' = one grid
+let CONTAINERS = [], ZONES = [];   // /api/containers snapshot
+const UNFILED = '__unfiled__';
 let lastCats = [];          // current category list (for sidebar re-render)
 let detailId = null, dIdx = 0;   // item detail modal state
 let editingId = null;       // id being edited, or "__new__", or null
@@ -929,20 +892,56 @@ $('users-list').addEventListener('click', async e => {
   else toast(res.error || 'Delete failed', true);
 });
 
-// ---- stock: an item can be split across several places ----
-// `stock` is [{location, quantity}, ...] and only exists when an item lives in
-// two or more places; `location`/`quantity` stay the primary stash and the
-// total, so everything below works the same for a plain one-bag item.
+// ---- containers: where things live ----
+// Items reference containers by id; paths and zones are looked up here so the
+// page stays right after a local edit, before the next poll.
+const cById = id => CONTAINERS.find(c => c.id === id);
+const pathOf = id => (id && cById(id) ? cById(id).path : '');
+const zoneNameOf = id => (id && cById(id) ? cById(id).zone_name : '');
+const byPath = (a, b) => a.path.localeCompare(b.path, undefined, { numeric: true });
+// Containers in tree order (each followed by what is inside it), with depth.
+function containerTree() {
+  const out = [];
+  const walk = (parent, depth) => CONTAINERS.filter(c => (c.parent || null) === parent).sort(byPath)
+    .forEach(c => { out.push({ c, depth }); walk(c.id, depth + 1); });
+  walk(null, 0);
+  return out;
+}
+// A container and everything nested inside it.
+function subtree(id) {
+  const out = new Set([id]);
+  let grew = true;
+  while (grew) { grew = false; for (const c of CONTAINERS) if (c.parent && out.has(c.parent) && !out.has(c.id)) { out.add(c.id); grew = true; } }
+  return out;
+}
+// <option>s for a container picker: grouped by zone, nested ones indented.
+function containerOptions(selected, unfiledValue, unfiledLabel) {
+  const tree = containerTree();
+  const opt = ({ c, depth }) => `<option value="${esc(c.id)}"${c.id === selected ? ' selected' : ''}>${'\u2003'.repeat(depth)}${esc(c.name)}</option>`;
+  const groups = [...ZONES.map(z => [z.name, tree.filter(t => t.c.effective_zone === z.id)]),
+                  ['No zone', tree.filter(t => !t.c.effective_zone)]];
+  return `<option value="${unfiledValue}"${selected === unfiledValue ? ' selected' : ''}>${unfiledLabel}</option>`
+    + groups.filter(([, rows]) => rows.length)
+            .map(([name, rows]) => `<optgroup label="${esc(name)}">${rows.map(opt).join('')}</optgroup>`).join('');
+}
+
+// ---- stock: an item can be split across several containers ----
+// `stock` is [{container, quantity}, ...] and only exists when an item lives in
+// two or more places; `container`/`quantity` stay the primary stash and the
+// total, so everything below works the same for a plain one-container item.
 function stashes(it) {
-  if (Array.isArray(it.stock) && it.stock.length) {
-    return it.stock.map(r => ({ location: String(r.location || '').trim(), quantity: Number(r.quantity) || 0 }));
-  }
-  return [{ location: String(it.location || '').trim(), quantity: Number(it.quantity) || 0 }];
+  const rows = (Array.isArray(it.stock) && it.stock.length) ? it.stock
+    : [{ container: it.container, quantity: it.quantity }];
+  return rows.map(r => ({ container: r.container || '', location: pathOf(r.container), quantity: Number(r.quantity) || 0 }));
 }
 const isSplit = it => Array.isArray(it.stock) && it.stock.length > 1;
-const itemLocs = it => stashes(it).map(s => s.location).filter(Boolean);
-const qtyAt = (it, loc) => stashes(it).filter(s => s.location === loc)
-                                      .reduce((a, s) => a + s.quantity, 0);
+const itemPlaces = it => stashes(it).map(s => s.location).filter(Boolean);
+function inContainerFilter(it, f) {
+  if (!f) return true;
+  if (f === UNFILED) return stashes(it).some(s => !s.container);
+  const ids = subtree(f);
+  return stashes(it).some(s => ids.has(s.container));
+}
 
 const DEFAULT_TITLE = document.title;
 const SORTS = ['recent', 'name', 'qty', 'cat'];
@@ -965,16 +964,18 @@ function exactById(q) {
   return ITEMS.find(it => String(it.id || '').toLowerCase() === q) || null;
 }
 function itemHay(it) {
-  return [it.id, it.name, it.category, itemLocs(it).join(' '), it.notes].join(' ').toLowerCase();
+  const zones = stashes(it).map(s => zoneNameOf(s.container));
+  return [it.id, it.name, it.category, itemPlaces(it).join(' '), zones.join(' '), it.notes].join(' ').toLowerCase();
 }
 function currentQuery() {
   const p = new URLSearchParams();
   const q = $('q').value;
   if (q) p.set('q', q);
   if (activeCat) p.set('cat', activeCat);
-  if (activeLoc) p.set('loc', activeLoc);
+  if (activeCont) p.set('container', activeCont);
   const sort = $('sort').value;
   if (sort && sort !== 'recent') p.set('sort', sort);
+  if (groupBy === 'none') p.set('group', 'none');
   const s = p.toString();
   return s ? '?' + s : '';
 }
@@ -1000,8 +1001,9 @@ function readFilters() {
   return {
     q: p.get('q') || '',
     cat: p.get('cat') || '',
-    loc: p.get('loc') || '',
+    cont: p.get('container') || '',
     sort: SORTS.includes(sort) ? sort : 'recent',
+    group: p.get('group') === 'none' ? 'none' : 'place',
   };
 }
 function applyFiltersFromUrl() {
@@ -1009,11 +1011,12 @@ function applyFiltersFromUrl() {
   applyingUrl = true;
   $('q').value = v.q;
   activeCat = v.cat;
-  activeLoc = v.loc;
+  activeCont = v.cont;
   $('sort').value = v.sort;
-  const loc = $('loc');
-  if ([...loc.options].some(o => o.value === v.loc)) loc.value = v.loc;
-  else loc.value = '';
+  groupBy = v.group;
+  $('group').value = v.group;
+  const sel = $('cont');
+  sel.value = [...sel.options].some(o => o.value === v.cont) ? v.cont : '';
   applyingUrl = false;
 }
 function setDocTitle(it) {
@@ -1022,33 +1025,17 @@ function setDocTitle(it) {
 noteListBase();
 applyFiltersFromUrl();
 
-function render(urlMode) {
-  if (urlMode) writeUrl(urlMode);
-  if (editingId) return; // don't yank the grid out while a modal is open
-  const q = normQuery();
-  const catF = activeCat, locF = activeLoc, sort = $('sort').value;
-  const exact = exactById(q);
-  let items = exact ? [exact] : ITEMS.filter(it => {
-    const locs = itemLocs(it);
-    return (!q || itemHay(it).includes(q)) && (!catF || it.category === catF) && (!locF || locs.includes(locF));
-  });
-  const idx = {}; ITEMS.forEach((it, i) => idx[it.id] = i);
-  if (sort === 'name') items.sort((a,b) => (a.name||'').localeCompare(b.name||''));
-  else if (sort === 'qty') items.sort((a,b) => (b.quantity||0)-(a.quantity||0));
-  else if (sort === 'cat') items.sort((a,b) => (a.category||'').localeCompare(b.category||''));
-  else items.sort((a,b) => idx[b.id]-idx[a.id]); // recent
-
-  $('grid').innerHTML = items.map(it => {
-    const flagged = /unconfirmed|UNCONFIRMED/.test([it.name, it.notes].join(' '));
-    const imgs = it.images || (it.image ? [it.image] : []);
-    const longNotes = (it.notes || '').length > 140;
-    return `
+function cardHtml(it) {
+  const flagged = /unconfirmed|UNCONFIRMED/.test([it.name, it.notes].join(' '));
+  const imgs = it.images || (it.image ? [it.image] : []);
+  const longNotes = (it.notes || '').length > 140;
+  return `
     <div class="card" data-id="${esc(it.id)}">
       <div class="thumb-wrap" role="button" tabindex="0" aria-label="View details of ${esc(it.name || 'item')}">
         ${imgs.length ? `<img src="/captures/${esc(imgs[0])}" alt="">` : `<div class="nothumb">📦</div>`}
         ${imgs.length > 1 ? `<span class="photo-count">📷 ${imgs.length}</span>` : ``}
         ${(it.models && it.models.length) ? `<button type="button" class="model-badge" data-act="view3d" title="View 3D model"><span class="ico" aria-hidden="true">🧊</span> 3D${it.models.length > 1 ? ' · ' + it.models.length : ''}</button>` : ``}
-        ${it.undelivered ? `<span class="flag" title="Ordered, not delivered yet — set a location when it arrives">🚚 not delivered</span>` : ``}
+        ${it.undelivered ? `<span class="flag" title="Ordered, not delivered yet — put it in a container when it arrives">🚚 not delivered</span>` : ``}
         ${flagged ? `<span class="flag" title="Has unconfirmed details">check</span>` : ``}
         ${isAdmin && !isSplit(it) ? `<div class="qty-badge">
           <button data-act="dec" aria-label="Decrease quantity">−</button>
@@ -1060,8 +1047,8 @@ function render(urlMode) {
         <div class="name"><a class="item-link" href="${itemHref(it.id)}">${it.name ? esc(it.name) : '<span style="color:var(--dim);font-style:italic">⏳ Identifying…</span>'}</a></div>
         <div class="chips">
           ${it.category ? `<button type="button" class="chip" data-act="fcat" title="Filter: ${esc(it.category)}">${esc(it.category)}</button>` : ''}
-          ${stashes(it).filter(st => st.location).map(st =>
-            `<button type="button" class="chip loc" data-act="floc" data-loc="${esc(st.location)}" title="Filter: ${esc(st.location)}">${esc(st.location)}${isSplit(it) ? `<span class="cq">×${st.quantity}</span>` : ''}</button>`).join('')}
+          ${stashes(it).filter(st => st.container).map(st =>
+            `<button type="button" class="chip loc" data-act="fcont" data-cont="${esc(st.container)}" title="Filter: ${esc(st.location)}">${esc((cById(st.container) || {}).name || st.container)}${isSplit(it) ? `<span class="cq">×${st.quantity}</span>` : ''}</button>`).join('')}
           ${it.condition ? `<span class="chip cond">${esc(it.condition)}</span>` : ''}
         </div>
         ${it.notes ? `<div class="notes${longNotes ? ' clamp" data-act="notes" tabindex="0" title="Show full notes' : ''}">${esc(it.notes)}</div>` : ''}
@@ -1070,8 +1057,64 @@ function render(urlMode) {
         <button class="btn" data-act="edit">Edit</button>
       </div>` : ''}
     </div>`;
-  }).join('');
-  const filtered = !!(q || catF || locF);
+}
+
+// Sections per zone, then per container (in tree order). A split item shows up
+// under every container it has units in; unfiled items come last.
+function groupedHtml(items, contF) {
+  const inFilter = contF && contF !== UNFILED ? subtree(contF) : null;
+  const byCont = new Map();
+  for (const it of items) {
+    for (const st of stashes(it)) {
+      const key = st.container && cById(st.container) ? st.container : '';
+      if (inFilter && !inFilter.has(key)) continue;
+      if (contF === UNFILED && key) continue;
+      if (!byCont.has(key)) byCont.set(key, []);
+      if (!byCont.get(key).includes(it)) byCont.get(key).push(it);
+    }
+  }
+  const contSec = (id, list) => {
+    const c = cById(id);
+    const parent = c && c.parent ? pathOf(c.parent) : '';
+    const n = `<span class="n">${list.length} item${list.length === 1 ? '' : 's'}</span>`;
+    const head = c
+      ? `<button type="button" class="cname" data-fcont="${esc(c.id)}" title="Show only ${esc(c.path)}">${esc(c.name)}</button>
+         ${parent ? `<span class="cparent">in ${esc(parent)}</span>` : ''}<span class="ctype">${esc(c.type)}</span>${n}
+         ${isAdmin ? `<a class="cap" href="/c/${encodeURIComponent(c.id)}">📷 Capture here</a>` : ''}`
+      : `<span>Unfiled</span>${n}`;
+    return `<section class="cont-sec"><h3 class="cont-h">${head}</h3><div class="grid">${list.map(cardHtml).join('')}</div></section>`;
+  };
+  const zoneSec = (name, ids) => {
+    const secs = ids.filter(id => byCont.has(id));
+    if (!secs.length) return '';
+    const n = new Set(secs.flatMap(id => byCont.get(id))).size;
+    return `<section class="zone-sec"><h2 class="zone-h">${esc(name)} <span class="n">${n} item${n === 1 ? '' : 's'}</span></h2>
+      ${secs.map(id => contSec(id, byCont.get(id))).join('')}</section>`;
+  };
+  const tree = containerTree().map(t => t.c);
+  return ZONES.map(z => zoneSec(z.name, tree.filter(c => c.effective_zone === z.id).map(c => c.id))).join('')
+    + zoneSec('No zone', tree.filter(c => !c.effective_zone).map(c => c.id))
+    + zoneSec('Not in a container', ['']);
+}
+
+function render(urlMode) {
+  if (urlMode) writeUrl(urlMode);
+  if (editingId) return; // don't yank the grid out while a modal is open
+  const q = normQuery();
+  const catF = activeCat, contF = activeCont, sort = $('sort').value;
+  const exact = exactById(q);
+  let items = exact ? [exact] : ITEMS.filter(it =>
+    (!q || itemHay(it).includes(q)) && (!catF || it.category === catF) && inContainerFilter(it, contF));
+  const idx = {}; ITEMS.forEach((it, i) => idx[it.id] = i);
+  if (sort === 'name') items.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  else if (sort === 'qty') items.sort((a,b) => (b.quantity||0)-(a.quantity||0));
+  else if (sort === 'cat') items.sort((a,b) => (a.category||'').localeCompare(b.category||''));
+  else items.sort((a,b) => idx[b.id]-idx[a.id]); // recent
+
+  $('grid').innerHTML = !items.length ? ''
+    : groupBy === 'place' && !exact ? groupedHtml(items, contF)
+    : `<div class="grid">${items.map(cardHtml).join('')}</div>`;
+  const filtered = !!(q || catF || contF);
   $('empty').style.display = items.length ? 'none' : 'block';
   if (!items.length) {
     $('empty').innerHTML = filtered
@@ -1093,148 +1136,42 @@ function render(urlMode) {
 function renderFilterPills() {
   const pills = [];
   if (activeCat) pills.push(`<button type="button" class="fpill" data-clear="cat" title="Clear category filter">${esc(activeCat)} <span class="x" aria-hidden="true">✕</span></button>`);
-  const lv = activeLoc;
-  if (lv) pills.push(`<button type="button" class="fpill amber" data-clear="loc" title="Clear location filter">${esc(lv)} <span class="x" aria-hidden="true">✕</span></button>`);
+  if (activeCont) {
+    const label = activeCont === UNFILED ? 'Unfiled' : (pathOf(activeCont) || activeCont);
+    pills.push(`<button type="button" class="fpill amber" data-clear="cont" title="Clear container filter">${esc(label)} <span class="x" aria-hidden="true">✕</span></button>`);
+  }
   $('filter-pills').innerHTML = pills.join('');
 }
 $('filter-pills').addEventListener('click', e => {
   const b = e.target.closest('[data-clear]'); if (!b) return;
   if (b.dataset.clear === 'cat') { activeCat = ''; renderSideCats(lastCats); }
-  else { activeLoc = ''; $('loc').value = ''; }
+  else { activeCont = ''; $('cont').value = ''; }
   render('push');
 });
 $('q-clear').addEventListener('click', () => { $('q').value = ''; render('push'); $('q').focus(); });
 $('empty').addEventListener('click', e => {
   if (e.target.id !== 'clear-filters') return;
-  $('q').value = ''; activeCat = ''; activeLoc = ''; $('loc').value = '';
+  $('q').value = ''; activeCat = ''; activeCont = ''; $('cont').value = '';
   renderSideCats(lastCats); render('push');
 });
 
 function refreshMeta() {
   const units = ITEMS.reduce((a,it) => a + (Number(it.quantity)||0), 0);
   const cats = [...new Set(ITEMS.map(it => it.category).filter(Boolean))].sort();
-  const locs = [...new Set(ITEMS.flatMap(itemLocs))].sort();
   $('s-items').textContent = ITEMS.length;
   $('s-units').textContent = units;
   $('s-cats').textContent = cats.length;
   lastCats = cats;
   renderSideCats(cats);
-  fillSelect($('loc'), locs, 'All locations');
+  fillContainerFilter();
   $('cats-list').innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
-  $('locs-list').innerHTML = locs.map(l => `<option value="${esc(l)}">`).join('');
-  renderStorageMap();
 }
 
-// ---- storage map: bags / trays / bins; click a slot to expand its items ----
-const SM_ORDER = ['Bag', 'Tray', 'Bin', 'Box'];
-let smOpen = null;   // currently expanded location, e.g. "Bag 3"
-// storage map collapse: persisted; defaults collapsed on phone widths
-let smCollapsed = (localStorage.getItem('smCollapsed') ?? (window.innerWidth <= 620 ? '1' : '0')) === '1';
-function smItemsFor(loc) {
-  return ITEMS.filter(it => itemLocs(it).includes(loc));
-}
-function renderStorageMap() {
-  // group items by container type -> number -> {n items, units}
-  const groups = {};   // type -> { num -> {n, units} }
-  for (const it of ITEMS) {
-    // A split item shows up in every bag it has units in, with that bag's count.
-    for (const st of stashes(it)) {
-      const m = /^([A-Za-z]+)\s+(\d+)$/.exec(st.location);
-      if (!m) continue;
-      const type = m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
-      const num = +m[2];
-      const g = (groups[type] = groups[type] || {});
-      const slot = (g[num] = g[num] || { n: 0, units: 0 });
-      slot.n += 1;
-      slot.units += st.quantity;
-    }
-  }
-  const types = Object.keys(groups).sort((a, b) => {
-    const ia = SM_ORDER.indexOf(a), ib = SM_ORDER.indexOf(b);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
-  });
-  const sec = $('sm-section');
-  sec.hidden = !types.length;
-  sec.classList.toggle('collapsed', smCollapsed);
-  $('sm-toggle').setAttribute('aria-expanded', String(!smCollapsed));
-  $('sm-summary').textContent = 'Storage — ' + (types.map(t => {
-    const n = Object.keys(groups[t]).length;
-    return `${n} ${t.toLowerCase()}${n === 1 ? '' : 's'}`;
-  }).join(' · ') || 'empty');
-  $('storage-map').innerHTML = types.map(type => {
-    const g = groups[type];
-    const nums = Object.keys(g).map(Number);
-    const max = Math.max(...nums);
-    const used = nums.length;
-    const gaps = [];
-    const cells = [];
-    for (let i = 1; i <= max; i++) {
-      const loc = `${type} ${i}`;
-      if (g[i]) {
-        const open = smOpen === loc ? ' open' : '';
-        cells.push(`<button type="button" class="sm-cell filled${open}" data-loc="${esc(loc)}" aria-expanded="${smOpen === loc}" title="${loc}: ${g[i].n} item${g[i].n===1?'':'s'}, ${g[i].units} unit${g[i].units===1?'':'s'}">
-          <span class="sm-n">${i}</span><span class="sm-c">${g[i].n} item${g[i].n===1?'':'s'}</span></button>`);
-      } else {
-        gaps.push(i);
-        cells.push(`<div class="sm-cell empty" title="${loc}: empty"><span class="sm-n">${i}</span><span class="sm-c">empty</span></div>`);
-      }
-    }
-    const gapNote = gaps.length ? `<span class="sm-gaps">${gaps.length} empty</span>` : '';
-    return `<div class="sm-group">
-      <div class="sm-ghead"><b>${type}s</b><span>${used} in use</span>${gapNote}</div>
-      <div class="sm-cells">${cells.join('')}</div>
-    </div>`;
-  }).join('');
-  renderStorageDetail();
-}
-function renderStorageDetail() {
-  const box = $('sm-detail');
-  const items = smOpen ? smItemsFor(smOpen) : [];
-  if (!items.length) { smOpen = null; box.innerHTML = ''; return; }   // location emptied → collapse
-  const units = items.reduce((a, it) => a + qtyAt(it, smOpen), 0);
-  box.innerHTML = `
-    <div class="sm-dhead">
-      <b>${esc(smOpen)}</b>
-      <span class="sm-sub">${items.length} item${items.length===1?'':'s'} · ${units} unit${units===1?'':'s'}</span>
-      <button class="sm-close" data-act="sm-close" title="Close" aria-label="Close ${esc(smOpen)} details">×</button>
-    </div>
-    <div class="sm-items">
-      ${items.map(it => {
-        const imgs = it.images || (it.image ? [it.image] : []);
-        const thumb = imgs.length
-          ? `<button type="button" class="sm-thumb zoom" data-id="${esc(it.id)}" aria-label="View photos of ${esc(it.name || 'item')}"><img src="/captures/${esc(imgs[0])}" alt=""></button>`
-          : `<div class="sm-thumb"><span class="noimg">📦</span></div>`;
-        const nm = it.name ? esc(it.name) : '⏳ Identifying…';
-        return `<div class="sm-item">${thumb}
-          <div class="sm-iname"><a class="item-link" href="${itemHref(it.id)}">${nm}</a></div>
-          <div class="sm-iqty">×${qtyAt(it, smOpen)}${isSplit(it) ? ` <span title="Split across ${esc(itemLocs(it).join(', '))}">of ${it.quantity}</span>` : ''}</div></div>`;
-      }).join('')}
-    </div>`;
-}
-$('sm-toggle').addEventListener('click', () => {
-  smCollapsed = !smCollapsed;
-  localStorage.setItem('smCollapsed', smCollapsed ? '1' : '0');
-  renderStorageMap();
-});
-// click a filled slot to expand/collapse its item gallery
-$('storage-map').addEventListener('click', e => {
-  const cell = e.target.closest('.sm-cell.filled'); if (!cell) return;
-  const loc = cell.getAttribute('data-loc');
-  smOpen = (smOpen === loc) ? null : loc;
-  renderStorageMap();
-});
-// detail panel: close button + thumbnail → lightbox
-$('sm-detail').addEventListener('click', e => {
-  if (e.target.closest('[data-act="sm-close"]')) { smOpen = null; renderStorageMap(); return; }
-  const thumb = e.target.closest('.sm-thumb.zoom'); if (!thumb) return;
-  const it = ITEMS.find(x => x.id === thumb.getAttribute('data-id')); if (!it) return;
-  const imgs = it.images || (it.image ? [it.image] : []);
-  if (imgs.length) openLightbox(imgs, 0);
-});
-function fillSelect(sel, values, allLabel) {
-  const cur = sel === $('loc') ? activeLoc : sel.value;
-  sel.innerHTML = `<option value="">${allLabel}</option>` + values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
-  if (values.includes(cur)) sel.value = cur;
+function fillContainerFilter() {
+  const sel = $('cont');
+  sel.innerHTML = containerOptions(activeCont, '', 'All containers')
+    + `<option value="${UNFILED}"${activeCont === UNFILED ? ' selected' : ''}>Unfiled (no container)</option>`;
+  if (![...sel.options].some(o => o.value === activeCont)) sel.value = '';
 }
 
 // ---- sidebar: category filter + mobile drawer ----
@@ -1289,10 +1226,10 @@ function renderDetail() {
     <div class="d-info">
       <div class="chips">
         ${it.category ? `<span class="chip">${esc(it.category)}</span>` : ''}
-        ${stashes(it).filter(st => st.location).map(st =>
+        ${stashes(it).filter(st => st.container).map(st =>
           `<span class="chip loc">${esc(st.location)}${isSplit(it) ? `<span class="cq">×${st.quantity}</span>` : ''}</span>`).join('')}
         ${it.condition ? `<span class="chip cond">${esc(it.condition)}</span>` : ''}
-        ${it.undelivered ? `<span class="chip warn" title="Ordered, not delivered yet — set a location when it arrives">🚚 not delivered</span>` : ''}
+        ${it.undelivered ? `<span class="chip warn" title="Ordered, not delivered yet — put it in a container when it arrives">🚚 not delivered</span>` : ''}
         ${flagged ? `<span class="chip warn" title="Has unconfirmed details">check</span>` : ''}
       </div>
       <div class="d-field"><label>Quantity${isSplit(it) ? ' — total' : ''}</label>
@@ -1300,8 +1237,8 @@ function renderDetail() {
           ? `<div class="d-qty-row"><button type="button" class="btn" data-dq="-1" aria-label="Decrease quantity">−</button><b class="d-qty">×${it.quantity ?? 1}</b><button type="button" class="btn" data-dq="1" aria-label="Increase quantity">+</button></div>`
           : `<div class="d-qty">×${it.quantity ?? 1}</div>`}
       </div>
-      ${isSplit(it) ? `<div class="d-field"><label>Stored in</label><div class="d-stock">${stashes(it).map(st =>
-          `<div class="row"><span class="where">${esc(st.location || 'Unfiled')}</span><span class="n">×${st.quantity}</span></div>`).join('')}</div></div>` : ''}
+      <div class="d-field"><label>Stored in</label><div class="d-stock">${stashes(it).map(st =>
+          `<div class="row"><span class="where">${esc(st.location || 'Unfiled')}</span>${zoneNameOf(st.container) ? `<span class="zone">${esc(zoneNameOf(st.container))}</span>` : ''}${isSplit(it) ? `<span class="n">×${st.quantity}</span>` : ''}</div>`).join('')}</div></div>
       ${it.notes ? `<div class="d-field"><label>Notes</label><div class="d-notes">${esc(it.notes)}</div></div>` : ''}
       ${models.length ? `<div class="d-field"><label>3D models</label><div class="models-list">${models.map((f, i) => `
         <div class="m-row"><span class="m-ico ico" aria-hidden="true">🧊</span><span class="m-name">${esc(shortModelName(f))}</span><span class="m-ext">${esc(MODEL_EXT(f))}</span>
@@ -1423,18 +1360,26 @@ $('grid').addEventListener('click', async e => {
   if (act === 'edit') return openEdit(id);
   if (act === 'view3d') { e.stopPropagation(); return openViewer(id, 0); }
   if (act === 'notes') { e.target.closest('.notes').classList.toggle('open'); return; }
-  if (act === 'fcat' || act === 'floc') {
+  if (act === 'fcat' || act === 'fcont') {
     const it = ITEMS.find(x => x.id === id); if (!it) return;
     if (act === 'fcat') { activeCat = it.category || ''; renderSideCats(lastCats); }
-    else {
-      activeLoc = e.target.closest('[data-loc]')?.dataset.loc || it.location || '';
-      $('loc').value = [...$('loc').options].some(o => o.value === activeLoc) ? activeLoc : '';
-    }
+    else filterContainer(e.target.closest('[data-cont]')?.dataset.cont || it.container || '');
     render('push');
     return;
   }
   if (!e.target.closest('button, a')) openDetail(id);
 });
+// container section headings filter to that container
+$('grid').addEventListener('click', e => {
+  const b = e.target.closest('[data-fcont]'); if (!b) return;
+  filterContainer(b.dataset.fcont);
+  render('push');
+  window.scrollTo({ top: 0 });
+});
+function filterContainer(id) {
+  activeCont = id;
+  $('cont').value = [...$('cont').options].some(o => o.value === id) ? id : '';
+}
 // keyboard path for the non-button interactive card parts (thumb zoom, notes expand)
 $('grid').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -1463,7 +1408,7 @@ $('lb-next').addEventListener('click', e => { e.stopPropagation(); lbStep(1); })
 $('lightbox-img').addEventListener('click', e => { e.stopPropagation(); lbStep(1); });
 
 // ---- modal: stock rows (one per place the item is stored) ----
-let stockDraft = [];   // [{location, quantity}] being edited; row 0 is the primary
+let stockDraft = [];   // [{container, quantity}] being edited; row 0 is the primary
 function renderStockRows() {
   const many = stockDraft.length > 1;
   $('stock-rows').innerHTML = stockDraft.map((r, i) => `
@@ -1471,7 +1416,7 @@ function renderStockRows() {
       <span class="s-x">×</span>
       <input class="s-qty" type="number" min="0" value="${r.quantity}" aria-label="Quantity in location ${i + 1}">
       <span class="s-in">in</span>
-      <input class="s-loc" list="locs-list" placeholder="e.g. Bag 1" value="${esc(r.location)}" aria-label="Location ${i + 1}">
+      <select class="s-cont" aria-label="Container ${i + 1}">${containerOptions(r.container || '', '', 'Unfiled (no container)')}</select>
       ${many ? `<button type="button" class="s-del" data-sdel="${i}" title="Remove this location" aria-label="Remove location ${i + 1}">✕</button>` : ''}
     </div>`).join('');
   const total = stockDraft.reduce((a, r) => a + (Number(r.quantity) || 0), 0);
@@ -1479,16 +1424,17 @@ function renderStockRows() {
 }
 function readStockRows() {
   stockDraft = [...$('stock-rows').querySelectorAll('.s-row')].map(row => ({
-    location: row.querySelector('.s-loc').value.trim(),
+    container: row.querySelector('.s-cont').value,
     quantity: Math.max(0, Number(row.querySelector('.s-qty').value) || 0),
   }));
 }
 function setStockDraft(it) {
   stockDraft = (Array.isArray(it && it.stock) && it.stock.length)
-    ? it.stock.map(r => ({ location: String(r.location || '').trim(), quantity: Number(r.quantity) || 0 }))
-    : [{ location: String((it && it.location) || ''), quantity: it && it.quantity != null ? Number(it.quantity) : 1 }];
+    ? it.stock.map(r => ({ container: r.container || '', quantity: Number(r.quantity) || 0 }))
+    : [{ container: (it && it.container) || '', quantity: it && it.quantity != null ? Number(it.quantity) : 1 }];
   renderStockRows();
 }
+$('stock-rows').addEventListener('change', () => readStockRows());
 $('stock-rows').addEventListener('input', () => {
   readStockRows();
   const total = stockDraft.reduce((a, r) => a + r.quantity, 0);
@@ -1500,14 +1446,14 @@ $('stock-rows').addEventListener('click', e => {
   if (!del) return;
   readStockRows();
   stockDraft.splice(+del.dataset.sdel, 1);
-  if (!stockDraft.length) stockDraft = [{ location: '', quantity: 1 }];
+  if (!stockDraft.length) stockDraft = [{ container: '', quantity: 1 }];
   renderStockRows();
 });
 $('add-stock-btn').addEventListener('click', () => {
   readStockRows();
-  stockDraft.push({ location: '', quantity: 1 });
+  stockDraft.push({ container: '', quantity: 1 });
   renderStockRows();
-  const rows = $('stock-rows').querySelectorAll('.s-row .s-loc');
+  const rows = $('stock-rows').querySelectorAll('.s-row .s-cont');
   rows[rows.length - 1].focus();
 });
 
@@ -1537,8 +1483,10 @@ function openAdd() {
   editingId = '__new__';
   $('modal-title').textContent = 'Add item';
   ['name','category','condition','notes'].forEach(f => $('f-'+f).value = '');
-  // default to the last used bag
-  setStockDraft({ location: localStorage.getItem('lastLocation') || '', quantity: 1 });
+  // default to the last used container (shared with the capture page)
+  let last = '';
+  try { last = JSON.parse(localStorage.getItem('lastContainer') || '""') || ''; } catch (e) {}
+  setStockDraft({ container: cById(last) ? last : '', quantity: 1 });
   $('del-btn').style.display = 'none';
   origImages = []; editImages = [];
   renderEditStrip();
@@ -1553,15 +1501,16 @@ function closeModal() { editingId = null; hideEditCam(); hideOverlay('overlay');
 
 function collect() {
   readStockRows();
-  const rows = stockDraft.filter(r => r.location || r.quantity > 0);
+  const rows = stockDraft.filter(r => r.container || r.quantity > 0)
+                         .map(r => ({ container: r.container || null, quantity: r.quantity }));
   return {
     name: $('f-name').value.trim(),
     category: $('f-category').value.trim(),
-    // `stock` is authoritative; quantity/location mirror it so any reader that
+    // `stock` is authoritative; quantity/container mirror it so any reader that
     // predates the split (agents, the API's summary rows) still gets the truth.
     stock: rows,
     quantity: rows.reduce((a, r) => a + r.quantity, 0),
-    location: rows.length ? rows[0].location : '',
+    container: rows.length ? rows[0].container : null,
     condition: $('f-condition').value.trim(),
     notes: $('f-notes').value.trim(),
     images: editImages.slice(),
@@ -1775,7 +1724,7 @@ $('save-btn').addEventListener('click', async () => {
       toast(n ? `Saved — ${n} new photo(s), re-examining…` : 'Saved');
     } else { toast('Save failed', true); return; }
   }
-  if (data.location) localStorage.setItem('lastLocation', data.location);  // remember for next add
+  if (data.container) { try { localStorage.setItem('lastContainer', JSON.stringify(data.container)); } catch (e) {} }  // remember for next add
   closeModal();
   refreshMeta();
 });
@@ -1958,7 +1907,8 @@ $('q').addEventListener('keydown', e => {
   e.preventDefault();
   openDetail(hit.id);
 });
-$('loc').addEventListener('change', () => { activeLoc = $('loc').value; render('push'); });
+$('cont').addEventListener('change', () => { activeCont = $('cont').value; render('push'); });
+$('group').addEventListener('change', () => { groupBy = $('group').value; render('push'); });
 $('sort').addEventListener('change', () => render('push'));
 
 // ---- identification queue (uploads + items awaiting the watcher agent) ----
@@ -1970,7 +1920,7 @@ function renderQueue(queue) {
   lastQueueJSON = json;
   const box = $('queue-strip');
   box.innerHTML = !QUEUE.length ? '' :
-    `<span class="qhead"><span class="spin"></span> Identifying ${QUEUE.length} upload${QUEUE.length === 1 ? '' : 's'}…</span>` +
+    `<span class="qhead">⏳ ${QUEUE.length} waiting to be tagged</span>` +
     QUEUE.map(q => {
       const img = (q.images || [])[0];
       const loc = q.location ? esc(q.location) + ' · ' : '';
@@ -2020,23 +1970,23 @@ function renderPending(pending) {
     const matches = matchIds.map(id => ITEMS.find(it => it.id === id)).filter(Boolean);
     const imgs = c.images || [];
     return `<div class="dup-card" data-pid="${esc(p.pending_id)}">
-      <div class="dup-head">⚠ Possible duplicate — set what it is and which bag</div>
+      <div class="dup-head">⚠ Possible duplicate — set what it is and where it lives</div>
       <div class="dup-edit">
-        <input class="d-name" aria-label="Item name" value="${esc(c.name || '')}" placeholder="What exactly is in this bag?">
+        <input class="d-name" aria-label="Item name" value="${esc(c.name || '')}" placeholder="What exactly is this?">
         <div class="d-row">
           <label>Qty <input type="number" min="0" class="d-qty" value="${c.quantity ?? 1}"></label>
-          <label>Bag <input class="d-loc" value="${esc(c.location || '')}" placeholder="e.g. Bag 14"></label>
+          <label>In <select class="d-cont">${containerOptions(c.container || '', '', 'Unfiled')}</select></label>
         </div>
       </div>
       <div class="dup-thumbs">${imgs.map(f => `<img src="/captures/${esc(f)}">`).join('')}</div>
-      ${matches.length ? `<div class="dup-matches"><div class="m-title">Add to a bag that already has this:</div>${matches.map(m => `
+      ${matches.length ? `<div class="dup-matches"><div class="m-title">Add to a stash that already has this:</div>${matches.map(m => `
         <div class="m-row">
-          <span class="m-info">${esc(m.location || '—')} · ×${m.quantity ?? 1} · ${esc(m.name || '')}</span>
-          <button class="go" data-act="add" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}" data-cur="${m.quantity ?? 1}">＋ Save: add to this bag</button>
-          <button data-act="set" data-target="${esc(m.id)}" data-bag="${esc(m.location || '')}">Set qty</button>
+          <span class="m-info">${esc(pathOf(m.container) || 'Unfiled')} · ×${m.quantity ?? 1} · ${esc(m.name || '')}</span>
+          <button class="go" data-act="add" data-target="${esc(m.id)}" data-bag="${esc(pathOf(m.container) || 'Unfiled')}" data-cur="${m.quantity ?? 1}">＋ Save: add to this stash</button>
+          <button data-act="set" data-target="${esc(m.id)}" data-bag="${esc(pathOf(m.container) || 'Unfiled')}">Set qty</button>
         </div>`).join('')}</div>` : ''}
       <div class="dup-btns">
-        <button class="go" data-act="separate">Save as new entry (Bag above)</button>
+        <button class="go" data-act="separate">Save as new entry (container above)</button>
         <button class="skip" data-act="dismiss" title="Dismiss — nothing logged or changed">Skip</button>
       </div>
       <div class="dup-status"></div>
@@ -2049,7 +1999,7 @@ $('pending-decisions').addEventListener('click', async e => {
   const candidate = {
     name: card.querySelector('.d-name').value.trim(),
     quantity: Number(card.querySelector('.d-qty').value) || 0,
-    location: card.querySelector('.d-loc').value.trim(),
+    container: card.querySelector('.d-cont').value || null,
   };
   const status = card.querySelector('.dup-status');
   status.className = 'dup-status'; status.textContent = 'Saving…';
@@ -2059,9 +2009,9 @@ $('pending-decisions').addEventListener('click', async e => {
     status.classList.add('ok');
     const act = b.dataset.act;
     let msg;
-    if (act === 'add') msg = `✓ Added ${candidate.quantity} — ${b.dataset.bag || 'bag'} now ×${(Number(b.dataset.cur) || 0) + candidate.quantity}`;
-    else if (act === 'set') msg = `✓ ${b.dataset.bag || 'Bag'} set to ×${candidate.quantity}`;
-    else if (act === 'separate') msg = `✓ Saved as new entry${candidate.location ? ' in ' + candidate.location : ''}`;
+    if (act === 'add') msg = `✓ Added ${candidate.quantity} — ${b.dataset.bag} now ×${(Number(b.dataset.cur) || 0) + candidate.quantity}`;
+    else if (act === 'set') msg = `✓ ${b.dataset.bag} set to ×${candidate.quantity}`;
+    else if (act === 'separate') msg = `✓ Saved as new entry${candidate.container ? ' in ' + pathOf(candidate.container) : ''}`;
     else msg = 'Dismissed';
     status.textContent = msg; toast(msg);
     lastPendingJSON = '';
@@ -2084,7 +2034,13 @@ async function poll() {
   try {
     const r = await fetch('/api/inventory');
     const next = (await r.json()).items || [];
-    const same = JSON.stringify(next) === JSON.stringify(ITEMS);
+    let placesChanged = false;
+    try {
+      const c = await (await fetch('/api/containers')).json();
+      placesChanged = JSON.stringify([c.containers, c.zones]) !== JSON.stringify([CONTAINERS, ZONES]);
+      CONTAINERS = c.containers || []; ZONES = c.zones || [];
+    } catch (e) {}
+    const same = !placesChanged && JSON.stringify(next) === JSON.stringify(ITEMS);
     ITEMS = next;
     itemsLoaded = true;
     if (!editingId && !same) {

@@ -35,9 +35,10 @@ or with an LLM agent.
 - **Public dashboard, private editing.** Anyone can view; only a logged-in admin
   sees the edit controls. Auth is off until you create the first admin, so local
   dev needs no login.
-- **Search, filter, and a bag/bin map.** Filter by category, location, or free
-  text, including the item id. The query and filters stay in the URL, so Back
-  and a shared link restore them. A storage map shows which bags are in use.
+- **Grouped by zone and container.** Items are listed per zone, then per
+  container (a drawer inside its cabinet). Filter by category, container
+  (including everything nested in it), or free text, including the item id. The
+  query and filters stay in the URL, so Back and a shared link restore them.
 - **A unique link per item.** `/i/<id>` opens that item. The detail modal shows
   the id and a copyable link. Right-click the name on a card for the same URL.
 - **Duplicate handling in the UI.** When you add a part you already have, the app
