@@ -712,8 +712,9 @@ the loop going:
   UI shows "⏳ Identifying…" until a name exists. Only block a save with neither a
   name nor a photo.
 - **Quantity comes from the label, not a guess.** The capture page has no quantity
-  field: the agent reads the printed pack count off the label. With no readable
-  count it writes 1 and says `unconfirmed` in the notes. Never invent a count.
+  field: the agent reads the printed pack count off the label, or counts units
+  that are plainly visible (noting `counted from photo`). Otherwise it writes 1
+  and says `unconfirmed` in the notes. Never invent a count.
 - **Locations are containers.** Items point at a container id; never write
   free-text location strings (the server only accepts them for backward
   compatibility). The capture page and the dashboard's Add modal share the
