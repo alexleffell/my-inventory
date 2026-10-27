@@ -168,8 +168,8 @@ no AI keys: photos queue up on the server, and when the user says **"tag the
 queue"** in a Claude Code session in this repo, the agent works through the whole
 backlog in one batch. Do exactly this:
 
-1. **Server and access.** `curl -s localhost:8770/api/summary` (port from
-   `INVENTORY_PORT`, default 8770). If nothing answers, start it in the background
+1. **Server and access.** `curl -s localhost:8770/api/summary` (the port is the
+   one `server.py` printed at startup: `INVENTORY_PORT`, default 8770). If nothing answers, start it in the background
    (`python3 server.py`) and say so. Writes need admin only once an account exists:
    `python3 server.py users` prints `auth: ENABLED` or `DISABLED`. When enabled,
    send `-u "$INVENTORY_ADMIN_USER:$INVENTORY_ADMIN_PASS"` on every POST; if those
@@ -193,8 +193,10 @@ backlog in one batch. Do exactly this:
      win for what the thing is called.
    - `category`: reuse an existing category from `/api/summary` when one fits;
      otherwise a short new one. (A fixed taxonomy arrives in Phase 2.)
-   - `quantity`: the printed pack count when a label shows one; otherwise 1, and
-     write `unconfirmed` next to the count in `notes`. Never guess a count.
+   - `quantity`: the printed pack count when a label shows one. Else, if every
+     unit is plainly visible and countable (10 resistors on a tape strip), that
+     count, with `counted from photo` in `notes`. Otherwise 1, with `unconfirmed`
+     next to the count in `notes`. Never estimate a count you cannot see.
    - `condition` when visible ("New (sealed bag)", "Used").
    - `notes`: manufacturer, model / part number, SKU, ratings and specs read off
      the label, the user's note, and a dated line `Tagged <YYYY-MM-DD> from
@@ -217,6 +219,15 @@ backlog in one batch. Do exactly this:
    - Enrich entry: `POST /api/ingest {id, <only the fields you improved>}`.
      Do not change its `container`. Then delete that item's
      `captures/review-*.json` marker(s).
+   - One capture showing several different products (two labelled bags shot
+     as one item): split it into one item per product. The first product gets
+     the sidecar id, each further one gets the stem of its own first photo as
+     `id`; all keep the queued container and note, and their notes say they came
+     from one capture. Report the split: the user merges on the dashboard if it
+     was meant to be one item (a kit).
+   - A label that names more than one product, or one you can only half read:
+     ingest your best reading with `unconfirmed` on the doubtful parts and list
+     it under "Unsure about". Only truly unreadable photos stay queued.
    - An entry whose photos are unreadable (blurry, dark, wrong file): leave it
      queued and report it.
    - If an item matches an open request on the to-buy list, mark it bought
@@ -497,13 +508,13 @@ chat. **Post a pending decision** so the user resolves it in the browser:
 
 ```
 POST /api/pending { matches:[<every similar item id>], candidate:{ name, category,
-                    quantity, location, condition, notes, images:[...] } }
+                    quantity, container, condition, notes, images:[...] } }
 ```
 
-Both pages poll `GET /api/pending` and render a rich duplicate card with editable
-name/quantity/bag, one row per matching stash (Add qty / Set qty), Create-new, and
-Skip. Resolving (`POST /api/resolve`) attaches photos to the chosen stash and removes
-the pending record. Model: one entry per (item, bag) stash. Pending records live in
+The dashboard polls `GET /api/pending` and renders a duplicate card with editable
+name/quantity, a container picker, one row per matching stash (Add qty / Set qty),
+Create-new, and Skip. Resolving (`POST /api/resolve`) attaches photos to the chosen
+stash and removes the pending record. Model: one entry per (item, container) stash. Pending records live in
 `data/pending.json` (transient).
 
 ## Wishlist / purchase requests ("to buy")
