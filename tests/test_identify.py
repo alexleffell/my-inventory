@@ -69,7 +69,7 @@ def main():
             f.write(png)
         inventory_path = os.path.join(tmp, "data", "inventory.json")
         with open(inventory_path, "w") as f:
-            json.dump({"items": [
+            json.dump({"schema": 2, "items": [
                 {"id": "cap-1", "name": "Old Name", "images": ["cap-1.png"]},
                 {"id": "item-2", "name": "No Photos", "images": []},
             ]}, f)

@@ -33,12 +33,19 @@ MODELS = os.path.join(ROOT, "models")
 INVENTORY = os.path.join(DATA, "inventory.json")
 PENDING = os.path.join(DATA, "pending.json")
 WISHLIST = os.path.join(DATA, "wishlist.json")
+CONTAINERS = os.path.join(DATA, "containers.json")
+
+# inventory.json schema: 1 = free-text `location` strings, 2 = container ids.
+SCHEMA = 2
 
 for d in (DATA, CAPTURES, MODELS):
     os.makedirs(d, exist_ok=True)
 if not os.path.exists(INVENTORY):
     with open(INVENTORY, "w") as f:
-        json.dump({"items": []}, f)
+        json.dump({"schema": SCHEMA, "items": []}, f)
+if not os.path.exists(CONTAINERS):
+    with open(CONTAINERS, "w") as f:
+        json.dump({"zones": [], "containers": []}, f)
 if not os.path.exists(PENDING):
     with open(PENDING, "w") as f:
         json.dump({"pending": []}, f)
@@ -83,22 +90,26 @@ def load_inv():
         return json.load(f)
 
 
-SUMMARY_FIELDS = ("id", "name", "category", "quantity", "location")
+SUMMARY_FIELDS = ("id", "name", "category", "quantity", "container", "location")
 
 
 def normalize_stock(item):
     """Keep an item's multi-location `stock` list and its top-level
-    `location`/`quantity` consistent.
+    `container`/`quantity` consistent.
 
-    `stock` is `[{"location": "Bag 1", "quantity": 5}, ...]` and is the source
-    of truth whenever the item is split across two or more places. `quantity`
-    then holds the TOTAL and `location` mirrors the first entry, so every
-    existing reader (cards, storage map, /api/summary, agents) keeps working
-    on an item exactly as it did when items lived in one bag.
+    `stock` is `[{"container": "c-k3x9qa", "quantity": 5}, ...]` and is the
+    source of truth whenever the item is split across two or more places.
+    `quantity` then holds the TOTAL and `container` mirrors the first entry, so
+    a reader that only looks at one place (cards, /api/summary, agents) still
+    sees the primary stash.
 
-    An item in a single place carries no `stock` at all: one location is just
-    `location` + `quantity`, same as before.
+    An item in a single place carries no `stock` at all: one place is just
+    `container` + `quantity`. An unfiled item has no `container`. `location`
+    is never stored; reads derive it from the container (see with_places).
     """
+    item.pop("location", None)
+    if not item.get("container"):
+        item.pop("container", None)
     stock = item.get("stock")
     if not isinstance(stock, list):
         if "stock" in item:
@@ -108,28 +119,35 @@ def normalize_stock(item):
     for row in stock:
         if not isinstance(row, dict):
             continue
-        loc = str(row.get("location") or "").strip()
+        cid = str(row.get("container") or "").strip() or None
         try:
             qty = int(row.get("quantity") or 0)
         except (TypeError, ValueError):
             qty = 0
-        if not loc and qty <= 0:
+        if not cid and qty <= 0:
             continue
-        clean.append({"location": loc, "quantity": max(0, qty)})
+        clean.append({"container": cid, "quantity": max(0, qty)})
     if len(clean) < 2:
         item.pop("stock", None)
         if clean:
-            item["location"] = clean[0]["location"]
+            _set_container(item, clean[0]["container"])
             item["quantity"] = clean[0]["quantity"]
         return item
     item["stock"] = clean
     item["quantity"] = sum(r["quantity"] for r in clean)
-    item["location"] = clean[0]["location"]
+    _set_container(item, clean[0]["container"])
     return item
 
 
+def _set_container(item, cid):
+    if cid:
+        item["container"] = cid
+    else:
+        item.pop("container", None)
+
+
 def apply_scalar_stock_edit(item, payload):
-    """Land a plain `quantity`/`location` edit on a split item's FIRST stash.
+    """Land a plain `quantity`/`container` edit on a split item's FIRST stash.
 
     The card's +/- buttons and any agent that does not know about `stock` send
     a single total. Without this the split rows and the total would disagree.
@@ -137,8 +155,8 @@ def apply_scalar_stock_edit(item, payload):
     stock = item.get("stock")
     if "stock" in payload or not isinstance(stock, list) or len(stock) < 2:
         return
-    if "location" in payload:
-        stock[0]["location"] = str(payload.get("location") or "").strip()
+    if "container" in payload:
+        stock[0]["container"] = payload.get("container") or None
     if "quantity" in payload:
         try:
             total = max(0, int(payload.get("quantity") or 0))
@@ -149,12 +167,255 @@ def apply_scalar_stock_edit(item, payload):
 
 
 def stock_rows(item):
-    """Every (location, quantity) stash of an item, split or not."""
+    """Every (container, quantity) stash of an item, split or not."""
     stock = item.get("stock")
     if isinstance(stock, list) and stock:
-        return [{"location": r.get("location") or "", "quantity": int(r.get("quantity") or 0)}
+        return [{"container": r.get("container") or None, "quantity": int(r.get("quantity") or 0)}
                 for r in stock if isinstance(r, dict)]
-    return [{"location": item.get("location") or "", "quantity": int(item.get("quantity") or 0)}]
+    return [{"container": item.get("container") or None, "quantity": int(item.get("quantity") or 0)}]
+
+
+# ---- containers and zones ---------------------------------------------------
+# data/containers.json = {"zones": [{id, name}], "containers": [{id, name, type,
+# parent, zone}]}. Containers nest through `parent`. Only a top-level container
+# stores a `zone`; a nested one inherits its root's zone, so a drawer can never
+# sit in a different zone from its cabinet.
+CONTAINER_TYPES = (
+    "cabinet", "drawer", "small-parts drawer", "divided box", "bin", "bag", "tray",
+    "shelf", "wall/pegboard", "rack", "case", "other",
+)
+# Short random ids keep the QR code on a label small. No 0/o/1/l/i look-alikes.
+ID_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+
+
+def new_id(prefix, taken):
+    while True:
+        ident = prefix + "".join(secrets.choice(ID_ALPHABET) for _ in range(6))
+        if ident not in taken:
+            return ident
+
+
+def load_containers():
+    try:
+        with open(CONTAINERS) as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        doc = {}
+    doc.setdefault("zones", [])
+    doc.setdefault("containers", [])
+    return doc
+
+
+def save_containers(doc):
+    _atomic_write(CONTAINERS, json.dumps(doc, indent=2))
+
+
+def container_index(doc):
+    return {c.get("id"): c for c in doc.get("containers", [])}
+
+
+def _ancestry(cid, by_id):
+    """The container and its parents, innermost first. Stops on a cycle."""
+    chain, seen = [], set()
+    while cid and cid in by_id and cid not in seen:
+        seen.add(cid)
+        chain.append(by_id[cid])
+        cid = by_id[cid].get("parent")
+    return chain
+
+
+def container_path(cid, by_id):
+    """Display path, outermost first: "Red cabinet › Drawer 3". "" if unknown."""
+    return " › ".join(c.get("name") or c.get("id") for c in reversed(_ancestry(cid, by_id)))
+
+
+def container_zone(cid, by_id):
+    """The zone id a container sits in: its top-level ancestor's zone."""
+    chain = _ancestry(cid, by_id)
+    return chain[-1].get("zone") if chain else None
+
+
+def guess_container_type(name):
+    words = name.split()
+    first = words[0].lower() if words else ""
+    return first if first in CONTAINER_TYPES else "other"
+
+
+def container_for_name(doc, name):
+    """The container whose display path matches `name` (ignoring case), else a
+    new top-level container with that name. Returns (id, created).
+
+    Used by the v2 migration and for legacy `location` strings in writes. A
+    path match first means an agent that echoes back a derived location
+    ("Red cabinet › Drawer 3") lands in that drawer, not a new container.
+    """
+    by_id = container_index(doc)
+    want = name.strip().lower()
+    for c in doc["containers"]:
+        if container_path(c.get("id"), by_id).lower() == want:
+            return c["id"], False
+    cid = new_id("c-", by_id)
+    doc["containers"].append({"id": cid, "name": name.strip(),
+                              "type": guess_container_type(name),
+                              "parent": None, "zone": None})
+    return cid, True
+
+
+def resolve_places(payload, doc):
+    """Turn a write payload's place fields into checked container ids, in place.
+
+    Accepts `container` (an id) and `stock` rows of `{container, quantity}`. A
+    legacy `location` string (older agents, scripts) is resolved through
+    container_for_name; when both are given, `container` wins. Returns
+    (error, created): error is a message for a 400, created says `doc` gained
+    containers and must be saved.
+    """
+    created = False
+
+    def resolve(obj):
+        nonlocal created
+        if "location" in obj:
+            loc = str(obj.pop("location") or "").strip()
+            if "container" not in obj:
+                cid = None
+                if loc:
+                    cid, new = container_for_name(doc, loc)
+                    created = created or new
+                obj["container"] = cid
+        if "container" in obj:
+            cid = str(obj.get("container") or "").strip() or None
+            if cid and cid not in container_index(doc):
+                return "unknown container id %r (GET /api/containers lists them)" % cid
+            obj["container"] = cid
+        return None
+
+    err = resolve(payload)
+    if err:
+        return err, created
+    if isinstance(payload.get("stock"), list):
+        rows = []
+        for row in payload["stock"]:
+            if not isinstance(row, dict):
+                continue
+            row = dict(row)
+            err = resolve(row)
+            if err:
+                return err, created
+            rows.append(row)
+        payload["stock"] = rows
+    return None, created
+
+
+def with_places(it, by_id):
+    """A copy of an item with the derived, human-readable `location` (the
+    container path) on the item and on each stock row. Never stored."""
+    out = dict(it)
+    out["location"] = container_path(it.get("container"), by_id)
+    if isinstance(it.get("stock"), list):
+        out["stock"] = [dict(r, location=container_path(r.get("container"), by_id))
+                        for r in it["stock"] if isinstance(r, dict)]
+    return out
+
+
+def containers_view(doc, items):
+    """containers.json for readers: each container with its path, effective
+    zone, how many items it holds directly, and how many children it has."""
+    by_id = container_index(doc)
+    zone_names = {z.get("id"): z.get("name") for z in doc["zones"]}
+    counts, children = {}, {}
+    for it in items:
+        for cid in {r["container"] for r in stock_rows(it) if r["container"]}:
+            counts[cid] = counts.get(cid, 0) + 1
+    for c in doc["containers"]:
+        if c.get("parent"):
+            children[c["parent"]] = children.get(c["parent"], 0) + 1
+    rows = []
+    for c in doc["containers"]:
+        zid = container_zone(c.get("id"), by_id)
+        rows.append(dict(c, path=container_path(c.get("id"), by_id),
+                         effective_zone=zid, zone_name=zone_names.get(zid) or "",
+                         item_count=counts.get(c.get("id"), 0),
+                         children=children.get(c.get("id"), 0)))
+    return {"zones": doc["zones"], "containers": rows}
+
+
+def queued_sidecars(inv, pending):
+    """(path, sidecar) for every cap-*.json whose photos are not yet in an item
+    or a pending duplicate decision: the identification queue."""
+    logged = set(img for i in inv.get("items", []) for img in (i.get("images") or []))
+    logged |= set(img for p in pending.get("pending", [])
+                  for img in ((p.get("candidate") or {}).get("images") or []))
+    out = []
+    for f in sorted(glob.glob(os.path.join(CAPTURES, "cap-*.json"))):
+        try:
+            with open(f) as fh:
+                d = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        files = d.get("files") or ([d["file"]] if d.get("file") else [])
+        if files and not any(x in logged for x in files):
+            out.append((f, d))
+    return out
+
+
+def migrate_to_v2():
+    """Schema 1 -> 2: free-text `location` strings become container records.
+
+    Runs at startup, before the server binds. Backs up inventory.json and
+    pending.json first, makes one top-level container per distinct location
+    string (reusing a container of the same name), and rewrites items, stock
+    rows, pending candidates and queued sidecars to container ids. Writes
+    containers.json first and inventory.json (with `schema`) last, so a crash
+    in between just re-runs the migration, which finds the containers by name.
+    Returns a summary dict, or None when there was nothing to do.
+    """
+    inv = load_inv()
+    if int(inv.get("schema") or 1) >= SCHEMA:
+        return None
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    shutil.copy2(INVENTORY, "%s.pre-v2-%s.bak" % (INVENTORY, stamp))
+    if os.path.exists(PENDING):
+        shutil.copy2(PENDING, "%s.pre-v2-%s.bak" % (PENDING, stamp))
+    doc = load_containers()
+    before = len(doc["containers"])
+
+    def to_id(loc):
+        loc = str(loc or "").strip()
+        return container_for_name(doc, loc)[0] if loc else None
+
+    def migrate(obj):
+        if "location" in obj and "container" not in obj:
+            obj["container"] = to_id(obj.get("location"))
+        if isinstance(obj.get("stock"), list):
+            obj["stock"] = [{"container": r["container"] if "container" in r else to_id(r.get("location")),
+                             "quantity": r.get("quantity")}
+                            for r in obj["stock"] if isinstance(r, dict)]
+        normalize_stock(obj)
+
+    pending = load_pending()
+    sidecars = queued_sidecars(inv, pending)   # decide before items change
+    items = inv.get("items", [])
+    for it in items:
+        migrate(it)
+    for p in pending.get("pending", []):
+        if isinstance(p.get("candidate"), dict):
+            migrate(p["candidate"])
+    rewritten = []
+    for path, d in sidecars:
+        if "location" in d:
+            d["legacy_location"] = d.pop("location")
+            d["container"] = to_id(d["legacy_location"])
+            rewritten.append((path, d))
+
+    save_containers(doc)
+    save_pending(pending)
+    for path, d in rewritten:
+        with open(path, "w") as f:
+            json.dump(d, f)
+    inv["schema"] = SCHEMA
+    save_inv(inv)
+    return {"containers_created": len(doc["containers"]) - before,
+            "items": len(items), "sidecars": len(rewritten)}
 
 
 
@@ -363,9 +624,11 @@ ITEM_SCHEMA = {
         "name": {"type": "string", "description": "Part name. Empty while an item is still being identified from its photos."},
         "category": {"type": "string", "description": "e.g. Sensors, Power, Resistors, Modules."},
         "quantity": {"type": "integer", "description": "Total units in stock, across every location."},
-        "location": {"type": "string", "description": "Physical storage, formatted '<Bag|Bin> <number>' (e.g. 'Bag 15'). When the item is split across places this is the first/primary one."},
-        "stock": {"type": "array", "description": "Present only when the item is split across two or more places: where the units actually are. Absent means everything sits in 'location'.",
+        "container": {"type": "string", "description": "Id of the container the item is stored in (see /api/containers). Absent while the item is unfiled. When the item is split across places this is the first/primary one."},
+        "location": {"type": "string", "description": "Read-only, human-readable path of that container, outermost first, e.g. 'Red cabinet › Drawer 3'. Empty when unfiled."},
+        "stock": {"type": "array", "description": "Present only when the item is split across two or more places: where the units actually are. Absent means everything sits in 'container'.",
                   "items": {"type": "object", "properties": {
+                      "container": {"type": "string"},
                       "location": {"type": "string"},
                       "quantity": {"type": "integer"}}}},
         "condition": {"type": "string"},
@@ -397,8 +660,9 @@ def openapi_spec(base_url):
             "title": "Inventory",
             "version": "1.0.0",
             "description": (
-                "A photo-driven inventory of small parts (electronic components, hardware, "
-                "craft supplies) stored in numbered bags and bins. Read endpoints are public.\n\n"
+                "A photo-driven inventory of a maker's tools, parts and materials. Every item "
+                "is stored in a container (drawer, bin, shelf...); containers nest and sit in "
+                "zones (work areas). Read endpoints are public.\n\n"
                 "There is no search endpoint on purpose. The inventory is a few hundred items, "
                 "so the reliable way to answer any question about it is: GET /api/items once "
                 "(one compact row per item, the entire inventory), then pick the ids you care "
@@ -412,10 +676,10 @@ def openapi_spec(base_url):
             "/api/summary": {"get": {
                 "operationId": "getSummary",
                 "summary": "Overview of the whole inventory.",
-                "description": "Item/unit totals plus a breakdown by category and by storage location, "
-                               "and how many purchase requests are open. Tiny response — useful for "
-                               "'what do I have?' questions; for anything item-specific go straight "
-                               "to /api/items.",
+                "description": "Item/unit totals plus a breakdown by category, by container (its "
+                               "path) and by zone, and how many purchase requests are open. Tiny "
+                               "response — useful for 'what do I have?' questions; for anything "
+                               "item-specific go straight to /api/items.",
                 "responses": {"200": {"description": "Totals and breakdowns.", "content": {"application/json": {"schema": {
                     "type": "object",
                     "properties": {
@@ -424,6 +688,8 @@ def openapi_spec(base_url):
                         "categories": {"type": "array", "items": {"type": "object", "properties": {
                             "name": {"type": "string"}, "items": {"type": "integer"}}}},
                         "locations": {"type": "array", "items": {"type": "object", "properties": {
+                            "name": {"type": "string"}, "items": {"type": "integer"}}}},
+                        "zones": {"type": "array", "items": {"type": "object", "properties": {
                             "name": {"type": "string"}, "items": {"type": "integer"}}}},
                         "wishlist_total": {"type": "integer"},
                         "wishlist_open": {"type": "integer"},
@@ -434,7 +700,7 @@ def openapi_spec(base_url):
                 "operationId": "listItems",
                 "summary": "Every item as a compact summary, or full records for specific ids.",
                 "description": "Call with no parameters to get one short row per item (id, name, "
-                               "category, quantity, location, photo count, attached 3D models) for "
+                               "category, quantity, container + location path, photo count, attached 3D models) for "
                                "the WHOLE inventory in a single response. That list is the ground "
                                "truth: scan it yourself instead of searching. Then call again with "
                                "ids= to get the complete records (notes, SKUs, specs, photo "
@@ -459,6 +725,34 @@ def openapi_spec(base_url):
                 "description": "Every item with every field. Use it when you need the full detail of the whole inventory at once; otherwise /api/items is the cheaper first call.",
                 "responses": {"200": {"description": "All items.", "content": {"application/json": {"schema": {
                     "type": "object", "properties": {"items": {"type": "array", "items": ITEM_SCHEMA}}}}}}},
+            }},
+            "/api/containers": {"get": {
+                "operationId": "listContainers",
+                "summary": "Every container and zone: where things are stored.",
+                "description": "Zones are work areas (e.g. 'Electronics bench'). Containers are the "
+                               "physical places items live in (cabinet, drawer, bin, shelf...); they "
+                               "nest through 'parent', and a nested container sits in its top-level "
+                               "ancestor's zone ('effective_zone'). Each container carries its display "
+                               "'path' and how many items it holds directly. Item rows from /api/items "
+                               "reference containers by id.",
+                "responses": {"200": {"description": "Zones and containers.", "content": {"application/json": {"schema": {
+                    "type": "object",
+                    "properties": {
+                        "zones": {"type": "array", "items": {"type": "object", "properties": {
+                            "id": {"type": "string"}, "name": {"type": "string"}}}},
+                        "containers": {"type": "array", "items": {"type": "object", "properties": {
+                            "id": {"type": "string"},
+                            "name": {"type": "string"},
+                            "type": {"type": "string", "enum": list(CONTAINER_TYPES)},
+                            "parent": {"type": ["string", "null"], "description": "Enclosing container id, or null at top level."},
+                            "zone": {"type": ["string", "null"], "description": "Zone id, stored on top-level containers only."},
+                            "effective_zone": {"type": ["string", "null"]},
+                            "zone_name": {"type": "string"},
+                            "path": {"type": "string", "description": "e.g. 'Red cabinet › Drawer 3'."},
+                            "item_count": {"type": "integer"},
+                            "children": {"type": "integer"}}}},
+                    },
+                }}}}},
             }},
             "/api/queue": {"get": {
                 "operationId": "getIdentificationQueue",
@@ -581,6 +875,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send(403, {"error": "admin access required"})
         return None
 
+    def _places(self, obj):
+        """resolve_places() for a write payload. Sends the 400 and returns False
+        on an unknown container id; saves containers made from legacy names."""
+        doc = load_containers()
+        err, created = resolve_places(obj, doc)
+        if err:
+            self._send(400, {"error": err})
+            return False
+        if created:
+            save_containers(doc)
+        return True
+
     def do_HEAD(self):
         # HEAD on the HTML pages only — used by the pages' self-reload poll.
         path = self.path.split("?")[0]
@@ -627,15 +933,25 @@ class Handler(BaseHTTPRequestHandler):
             host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "localhost:8770"
             return self._send(200, openapi_spec("%s://%s" % (proto, host)))
         if path == "/api/inventory":
-            with open(INVENTORY) as f:
-                return self._send(200, f.read(), "application/json")
+            inv = load_inv()
+            by_id = container_index(load_containers())
+            inv["items"] = [with_places(it, by_id) for it in inv.get("items", [])]
+            return self._send(200, inv)
+        if path == "/api/containers":
+            # Public: zones + containers, each with its path and item count.
+            return self._send(200, containers_view(load_containers(),
+                                                   load_inv().get("items", [])))
         if path == "/api/identify/status":
             # Identification runs through the photo watcher/bridge (an agent
             # polling for review-*.json markers), not an API key on this server.
             return self._send(200, {"available": True, "mode": "watcher"})
         if path == "/api/pending":
-            with open(PENDING) as f:
-                return self._send(200, f.read(), "application/json")
+            p = load_pending()
+            by_id = container_index(load_containers())
+            for rec in p.get("pending", []):
+                if isinstance(rec.get("candidate"), dict):
+                    rec["candidate"] = with_places(rec["candidate"], by_id)
+            return self._send(200, p)
         if path == "/api/wishlist":
             # Public: purchase requests ("to buy"). Anyone (incl. an MCP agent)
             # can read the list; creating is open, managing is admin-only.
@@ -651,21 +967,28 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/summary":
             # Public overview, handy for an LLM/agent to grok what's in stock.
             items = load_inv().get("items", [])
-            cats, locs, units = {}, {}, 0
+            cdoc = load_containers()
+            by_id = container_index(cdoc)
+            zone_names = {z.get("id"): z.get("name") for z in cdoc["zones"]}
+            cats, locs, zones, units = {}, {}, {}, 0
             for it in items:
                 units += int(it.get("quantity") or 0)
                 c = it.get("category") or "Uncategorized"
                 cats[c] = cats.get(c, 0) + 1
                 # A split item counts once in every place it is stored.
                 for row in stock_rows(it):
-                    l = row["location"] or "Unfiled"
+                    l = container_path(row["container"], by_id) or "Unfiled"
                     locs[l] = locs.get(l, 0) + 1
+                for z in {zone_names.get(container_zone(r["container"], by_id)) or "No zone"
+                          for r in stock_rows(it)}:
+                    zones[z] = zones.get(z, 0) + 1
             wl = load_wishlist().get("wishlist", [])
             return self._send(200, {
                 "total_items": len(items),
                 "total_units": units,
                 "categories": [{"name": k, "items": v} for k, v in sorted(cats.items(), key=lambda x: -x[1])],
                 "locations": [{"name": k, "items": v} for k, v in sorted(locs.items(), key=lambda x: -x[1])],
+                "zones": [{"name": k, "items": v} for k, v in sorted(zones.items(), key=lambda x: -x[1])],
                 "wishlist_total": len(wl),
                 "wishlist_open": sum(1 for w in wl if w.get("status") != "bought"),
             })
@@ -710,7 +1033,8 @@ class Handler(BaseHTTPRequestHandler):
             # those ids. Everything in full is /api/inventory.
             qs = parse_qs(urlparse(self.path).query)
             ids = [x.strip() for x in (qs.get("ids", [""])[0] or "").split(",") if x.strip()]
-            items = load_inv().get("items", [])
+            by_id = container_index(load_containers())
+            items = [with_places(it, by_id) for it in load_inv().get("items", [])]
             if ids:
                 found, missing = items_by_ids(items, ids)
                 return self._send(200, {"count": len(found), "items": found, "missing": missing})
@@ -858,6 +1182,105 @@ class Handler(BaseHTTPRequestHandler):
                 set_role(username, role)
             return self._send(200, {"ok": True})
 
+        if path == "/api/containers":
+            # Create / update / delete a container. Body:
+            #   {action:"create", name, type?, parent?, zone?}
+            #   {action:"update", id, name?, type?, parent?, zone?}
+            #   {action:"delete", id}   (refused while anything is stored in it)
+            action = (payload.get("action") or "create").strip()
+            doc = load_containers()
+            by_id = container_index(doc)
+            zone_ids = {z.get("id") for z in doc["zones"]}
+            if action == "create":
+                rec = {"id": new_id("c-", by_id), "name": "", "type": "other",
+                       "parent": None, "zone": None}
+            else:
+                rec = by_id.get(payload.get("id"))
+                if not rec:
+                    return self._send(404, {"error": "container not found"})
+            if action == "delete":
+                cid = rec["id"]
+                kids = [c for c in doc["containers"] if c.get("parent") == cid]
+                held = [it for it in load_inv().get("items", [])
+                        if any(r["container"] == cid for r in stock_rows(it))]
+                queued = [d for _, d in queued_sidecars(load_inv(), load_pending())
+                          if d.get("container") == cid]
+                if kids or held or queued:
+                    return self._send(409, {
+                        "error": "container is not empty: %d item(s), %d container(s), "
+                                 "%d queued capture(s)" % (len(held), len(kids), len(queued))})
+                doc["containers"] = [c for c in doc["containers"] if c.get("id") != cid]
+                save_containers(doc)
+                return self._send(200, {"ok": True, "removed": cid})
+            if action not in ("create", "update"):
+                return self._send(400, {"error": "unknown action"})
+            new = dict(rec)
+            if "name" in payload or action == "create":
+                new["name"] = str(payload.get("name") or "").strip()
+                if not new["name"]:
+                    return self._send(400, {"error": "name required"})
+            if "type" in payload:
+                new["type"] = str(payload.get("type") or "other").strip().lower()
+                if new["type"] not in CONTAINER_TYPES:
+                    return self._send(400, {"error": "type must be one of: %s"
+                                            % ", ".join(CONTAINER_TYPES)})
+            if "parent" in payload:
+                parent = payload.get("parent") or None
+                if parent and parent not in by_id:
+                    return self._send(400, {"error": "unknown parent container"})
+                if parent and any(c.get("id") == new["id"] for c in _ancestry(parent, by_id)):
+                    return self._send(400, {"error": "a container cannot sit inside itself"})
+                new["parent"] = parent
+            if "zone" in payload:
+                zone = payload.get("zone") or None
+                if zone and zone not in zone_ids:
+                    return self._send(400, {"error": "unknown zone"})
+                if zone and new.get("parent"):
+                    return self._send(400, {"error": "a nested container inherits its "
+                                            "zone from its top-level container"})
+                new["zone"] = zone
+            if new.get("parent"):
+                new["zone"] = None      # nested: the zone comes from the root
+            if action == "create":
+                doc["containers"].append(new)
+            else:
+                rec.clear()
+                rec.update(new)
+            save_containers(doc)
+            view = containers_view(doc, load_inv().get("items", []))
+            return self._send(200, {"ok": True, "container": next(
+                c for c in view["containers"] if c["id"] == new["id"])})
+
+        if path == "/api/zones":
+            # {action:"create", name} / {action:"rename", id, name} / {action:"delete", id}.
+            # Deleting a zone leaves its containers zone-less, nothing else.
+            action = (payload.get("action") or "create").strip()
+            doc = load_containers()
+            name = str(payload.get("name") or "").strip()
+            zone = next((z for z in doc["zones"] if z.get("id") == payload.get("id")), None)
+            if action in ("rename", "delete") and not zone:
+                return self._send(404, {"error": "zone not found"})
+            if action in ("create", "rename"):
+                if not name:
+                    return self._send(400, {"error": "name required"})
+                if any(z.get("name", "").lower() == name.lower() and z is not zone
+                       for z in doc["zones"]):
+                    return self._send(400, {"error": "a zone with that name exists"})
+            if action == "create":
+                zone = {"id": new_id("z-", {z.get("id") for z in doc["zones"]}), "name": name}
+                doc["zones"].append(zone)
+            elif action == "rename":
+                zone["name"] = name
+            elif action == "delete":
+                doc["zones"] = [z for z in doc["zones"] if z is not zone]
+                for c in doc["containers"]:
+                    if c.get("zone") == zone["id"]:
+                        c["zone"] = None
+            else:
+                return self._send(400, {"error": "unknown action"})
+            save_containers(doc)
+            return self._send(200, {"ok": True, "zone": zone})
+
         if path == "/api/capture":
             data_url = payload.get("image", "")
             if "," in data_url:
@@ -959,6 +1382,8 @@ class Handler(BaseHTTPRequestHandler):
             item = dict(payload)
             if not item.get("id"):
                 return self._send(400, {"error": "id required"})
+            if not self._places(item):
+                return
             inv = load_inv()
             items = inv.setdefault("items", [])
             for idx, it in enumerate(items):
@@ -975,8 +1400,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/add":
             # Manually add a new item from the dashboard.
-            inv = load_inv()
             item = dict(payload)
+            if not self._places(item):
+                return
+            inv = load_inv()
             item.setdefault("id", "item-%d" % int(time.time() * 1000))
             item.setdefault("quantity", 1)
             normalize_stock(item)
@@ -993,8 +1420,11 @@ class Handler(BaseHTTPRequestHandler):
             inv = load_inv()
             for it in inv.get("items", []):
                 if it.get("id") == item_id:
+                    payload = dict(payload)
+                    if not self._places(payload):
+                        return
                     old_imgs = list(it.get("images", []))
-                    had_loc = bool(str(it.get("location") or "").strip())
+                    had_loc = bool(it.get("container"))
                     for k, v in payload.items():
                         if k != "id":
                             it[k] = v
@@ -1002,10 +1432,10 @@ class Handler(BaseHTTPRequestHandler):
                     # agent) lands on the primary stash of a split item.
                     apply_scalar_stock_edit(it, payload)
                     normalize_stock(it)
-                    # An undelivered (ordered) item that gets a location has
+                    # An undelivered (ordered) item that gets a container has
                     # arrived: clear the flag unless the edit sets it explicitly.
                     if (it.get("undelivered") and "undelivered" not in payload
-                            and not had_loc and str(it.get("location") or "").strip()):
+                            and not had_loc and it.get("container")):
                         it["undelivered"] = False
                     save_inv(inv)
                     new_imgs = [x for x in it.get("images", []) if x not in old_imgs]
@@ -1028,11 +1458,14 @@ class Handler(BaseHTTPRequestHandler):
             matches = payload.get("matches")
             if not matches and payload.get("match_id"):
                 matches = [payload["match_id"]]
+            candidate = dict(payload.get("candidate") or {})
+            if not self._places(candidate):
+                return
             p = load_pending()
             rec = {
                 "pending_id": "pend-%d" % int(time.time() * 1000),
                 "matches": matches or [],
-                "candidate": payload.get("candidate", {}),
+                "candidate": candidate,
             }
             p.setdefault("pending", []).append(rec)
             save_pending(p)
@@ -1052,9 +1485,13 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, {"error": "pending not found"})
             inv = load_inv()
             cand = dict(rec.get("candidate", {}))
-            for k in ("name", "category", "quantity", "location", "condition", "notes"):
+            for k in ("name", "category", "quantity", "container", "location", "condition", "notes"):
                 if k in ov:
                     cand[k] = ov[k]
+            if "location" in ov and "container" not in ov:
+                cand.pop("container", None)     # a legacy location override wins
+            if not self._places(cand):
+                return
             if action == "separate":
                 item = dict(cand)
                 item.setdefault("id", "item-%d" % int(time.time() * 1000))
@@ -1157,6 +1594,11 @@ if __name__ == "__main__":
             _usage()
         sys.exit(0)
 
+    migrated = migrate_to_v2()
+    if migrated:
+        print("Migrated inventory to schema %d: %d item(s), %d container(s) created from "
+              "location strings, %d queued capture(s) updated (backup: data/*.pre-v2-*.bak)"
+              % (SCHEMA, migrated["items"], migrated["containers_created"], migrated["sidecars"]))
     srv = ThreadingHTTPServer((HOST, PORT), Handler)
     auth = "ENABLED" if load_users() else "DISABLED (open — run 'adduser' to secure)"
     print("Inventory server on %s:%d   [auth: %s]" % (HOST, PORT, auth))
